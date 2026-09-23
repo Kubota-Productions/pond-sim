@@ -4,7 +4,4 @@
 
 [resource]
 script = ExtResource("1_2p0nm")
-eating_distance = 0.5
-consumption_cooldown = 15.0
-minimum_size_ratio = 25.0
-energy_loss_per_second = 0.5
+minimum_prey_size = 1.0

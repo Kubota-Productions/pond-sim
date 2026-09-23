@@ -10,14 +10,14 @@
 [node name="Node2D" type="Node2D" parent="." unique_id=1176570652]
 script = ExtResource("1_bva37")
 boid_scene = ExtResource("2_215fb")
-spawn_area = Rect2(0, 0, 1920, 1000)
+spawn_area = Rect2(0, 0, 3840, 2000)
 
 [node name="Camera2D" type="Camera2D" parent="Node2D" unique_id=2096432904]
 position = Vector2(960, 545)
 script = ExtResource("2_gqwpr")
 drag_button = 1
 drag_zoom_curve = 0.5
-bounds = Rect2(0, 0, 1920, 1080)
+bounds = Rect2(0, 0, 3840, 2160)
 bounds_overscroll = 20.0
 show_bounds_debug = true
 bounds_debug_color = Color(1, 0.6784314, 0.47843137, 0.8)

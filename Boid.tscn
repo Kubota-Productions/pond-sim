@@ -5,7 +5,6 @@
 [ext_resource type="Resource" uid="uid://c8mrg71ckro1i" path="res://resources/BoidAgeModule.tres" id="3_2qxn4"]
 [ext_resource type="Resource" uid="uid://cmh7xa1obghdy" path="res://resources/BoidBreedingModule.tres" id="4_dyl04"]
 [ext_resource type="Resource" uid="uid://bho75lt434e0y" path="res://resources/BoidGrowthModule.tres" id="5_bugqg"]
-[ext_resource type="Resource" uid="uid://cqp220iwhq62o" path="res://resources/BoidIntelligenceModule.tres" id="6_vcpos"]
 [ext_resource type="Resource" uid="uid://y8ld6kbinmx2" path="res://resources/BoidModiferModule.tres" id="7_slkiq"]
 [ext_resource type="Resource" uid="uid://do0dg547sbmuo" path="res://resources/BoidsConsumptionModule.tres" id="8_2yvxm"]
 [ext_resource type="Resource" uid="uid://co51t4boq4mw4" path="res://resources/BoidSizeModule.tres" id="9_o8igv"]
@@ -13,4 +12,10 @@
 
 [node name="FlockBoid" type="Node2D" unique_id=1400672770]
 script = ExtResource("1_ur8rf")
-modules = Array[ExtResource("2_7a3us")]([ExtResource("3_2qxn4"), ExtResource("4_dyl04"), ExtResource("5_bugqg"), ExtResource("6_vcpos"), ExtResource("7_slkiq"), ExtResource("8_2yvxm"), ExtResource("9_o8igv"), ExtResource("10_imadf")])
+modules = Array[ExtResource("2_7a3us")]([ExtResource("7_slkiq"), ExtResource("9_o8igv"), ExtResource("10_imadf"), ExtResource("5_bugqg"), ExtResource("4_dyl04"), ExtResource("8_2yvxm"), ExtResource("3_2qxn4")])
+perception_radius = 100.0
+separation_weight = 3.0
+alignment_weight = 4.0
+cohesion_weight = 4.0
+edge_avoid_force = 1000.0
+edge_avoid_curve = 1.0

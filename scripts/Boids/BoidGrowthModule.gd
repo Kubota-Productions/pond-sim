@@ -29,10 +29,31 @@ var current_size: float = 0.5
 
 
 # =============================================================
+# MUTUAL EXCLUSION WITH BoidAgeModule
+# =============================================================
+# BoidBase._get_scale() multiplies every module's get_scale() together.
+# BoidAgeModule already contributes its own starting_size_ratio → 1.0
+# growth curve via get_scale(). If this module ALSO ramps
+# BoidSizeModule.size over time, the two curves compound
+# multiplicatively — a boid at 50% through each individually is only
+# at 25% effective visual size — making real growth take far longer
+# than either curve alone suggests, often longer than the boid's
+# lifespan. Treat the two systems as mutually exclusive: when
+# BoidAgeModule is present, this module does nothing to size.
+
+func _is_superseded_by_age_module(boid: BoidBase) -> bool:
+
+	return boid.get_module_by_type(BoidAgeModule) != null
+
+
+# =============================================================
 # INITIALIZE
 # =============================================================
 
 func initialize(boid: BoidBase) -> void:
+
+	if _is_superseded_by_age_module(boid):
+		return
 
 	current_size = starting_size
 
@@ -56,6 +77,9 @@ func update(
 ) -> void:
 
 	if not enabled:
+		return
+
+	if _is_superseded_by_age_module(boid):
 		return
 
 

@@ -179,9 +179,9 @@ func _count_ready_boids(
 			continue
 
 
-		var other_stamina: BoidStaminaModule = (
+		var other_stamina: BoidstaminaModule = (
 			other.get_module_by_type(
-				BoidStaminaModule
+				BoidstaminaModule
 			)
 		)
 

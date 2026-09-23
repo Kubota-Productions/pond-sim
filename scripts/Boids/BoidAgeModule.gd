@@ -1,89 +1,71 @@
 extends BoidModifierModule
 class_name BoidAgeModule
 
-
 @export_group("Age")
-
 @export var minimum_age: float = 40.0
 @export var maximum_age: float = 80.0
 
-
 @export_group("Growth")
-
-@export_range(0.01, 1.0)
-var starting_size_ratio: float = 0.25
-
-@export var growth_duration: float = 20.0
-
+@export var starting_size_ratio: float = 1.0
+@export var growth_duration: float = 10.0
 
 @export_group("Death")
-
 @export var die_at_maximum_size: bool = false
 @export var die_at_maximum_age: bool = true
+@export var death_display_duration: float = 1.0
 
-
-# RUNTIME
 var age: float = 0.0
 var growth_progress: float = 0.0
-
 var lifespan: float = 60.0
-
 var spawn_time: float = 0.0
 
 var is_dead: bool = false
+var death_timer: float = 0.0
 
-# True when this boid was actually spawned as a young boid.
-var started_small: bool = true
+var started_small: bool = false
+
+var _inherited_lifespan: bool = false
 
 
-# INITIALIZE
 func initialize(boid: BoidBase) -> void:
 
 	age = 0.0
 	growth_progress = 0.0
-	is_dead = false
 
-	# Record the moment this boid spawned.
+	is_dead = false
+	death_timer = 0.0
+
 	spawn_time = Time.get_ticks_msec() / 1000.0
 
-	# Give this boid its own random lifespan.
-	if maximum_age <= minimum_age:
+	if not _inherited_lifespan:
 
-		lifespan = minimum_age
+		if maximum_age <= minimum_age:
+			lifespan = minimum_age
+		else:
+			lifespan = randf_range(
+				minimum_age,
+				maximum_age
+			)
 
-	else:
-
-		lifespan = randf_range(
-			minimum_age,
-			maximum_age
-		)
-
-	# Determine whether this boid starts young
-	# or is already at full size.
-	#
-	# We use the starting size ratio as the definition
-	# of a naturally spawned young boid.
 	started_small = starting_size_ratio < 1.0
 
-	print(
-		"[AGE] Initialized: ",
-		boid.name,
-		" | lifespan = ",
-		lifespan,
-		" | started small = ",
-		started_small,
-		" | spawn time = ",
-		spawn_time
-	)
 
-
-# UPDATE
 func update(
 	boid: BoidBase,
 	delta: float
 ) -> void:
 
+	# --------------------------------------------------
+	# DEAD STATE
+	# --------------------------------------------------
+
 	if is_dead:
+
+		death_timer -= delta
+
+		if death_timer <= 0.0:
+			boid.queue_free()
+
 		return
 
 
@@ -91,10 +73,6 @@ func update(
 	# AGE
 	# --------------------------------------------------
 
-	# Calculate age from the time this boid spawned.
-	#
-	# This means age is based on actual elapsed time
-	# since spawning rather than on growth state.
 	var current_time: float = (
 		Time.get_ticks_msec() / 1000.0
 	)
@@ -120,95 +98,102 @@ func update(
 
 
 	# --------------------------------------------------
-	# OLD AGE DEATH
+	# DEATH BY AGE
 	# --------------------------------------------------
 
 	if die_at_maximum_age:
 
 		if age >= lifespan:
-
-			print(
-				"[AGE] OLD AGE DEATH: ",
-				boid.name,
-				" | age = ",
-				age,
-				" | lifespan = ",
-				lifespan
-			)
-
 			_die(boid)
-
 			return
 
 
 	# --------------------------------------------------
-	# MAX SIZE DEATH
+	# DEATH BY SIZE
 	# --------------------------------------------------
 
-	# Only use maximum-size death for boids that actually
-	# started small and therefore went through a growth phase.
-	#
-	# A boid spawned at full size will NOT die simply
-	# because its size is already at maximum.
 	if die_at_maximum_size:
 
 		if started_small and growth_progress >= 1.0:
-
-			print(
-				"[AGE] MAX SIZE DEATH: ",
-				boid.name,
-				" | age = ",
-				age
-			)
-
 			_die(boid)
-
 			return
 
 
-# SCALE
-func get_scale(boid: BoidBase) -> Vector2:
+func get_scale(
+	boid: BoidBase
+) -> Vector2:
 
-	var growth_scale: float = lerp(
-		starting_size_ratio,
-		1.0,
-		growth_progress
-	)
+	var size: float = 1.0
 
-	return Vector2.ONE * growth_scale
+	if starting_size_ratio < 1.0:
+
+		size = lerp(
+			starting_size_ratio,
+			1.0,
+			growth_progress
+		)
+
+	return Vector2.ONE * size
 
 
-# OFFSPRING
+func modify_color(
+	boid: BoidBase,
+	current_color: Color
+) -> Color:
+
+	if is_dead:
+		return Color.BLACK
+
+	return current_color
+
+
 func prepare_offspring(
 	offspring: BoidBase,
 	parent_a: BoidBase,
 	parent_b: BoidBase
 ) -> void:
 
-	# Runtime state must start fresh.
 	age = 0.0
 	growth_progress = 0.0
-	is_dead = false
 
-	# Offspring gets a new spawn timestamp when
-	# initialize() runs.
+	is_dead = false
+	death_timer = 0.0
+
 	spawn_time = 0.0
 
-	# Offspring is considered young.
 	started_small = true
 
+	_inherited_lifespan = true
 
-# DEATH
-func _die(boid: BoidBase) -> void:
+
+func get_inherited_state() -> Dictionary:
+
+	return {
+		"lifespan": lifespan
+	}
+
+
+func apply_inherited_state(
+	state: Dictionary
+) -> void:
+
+	if state.has("lifespan"):
+		lifespan = state["lifespan"]
+
+
+func _die(
+	boid: BoidBase
+) -> void:
 
 	if is_dead:
 		return
 
 	is_dead = true
+	death_timer = death_display_duration
 
-	print(
-		"[AGE] queue_free() called on ",
-		boid.name
-	)
+	# Immediately stop the boid.
+	boid.velocity = Vector2.ZERO
+	boid.acceleration = Vector2.ZERO
 
-	boid.queue_free()
+	# Make the black corpse visible immediately.
+	boid.queue_redraw()

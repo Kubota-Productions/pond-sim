@@ -15,6 +15,12 @@ class_name BoidConsumptionModule
 # The predator must be at least this size to eat.
 @export var minimum_predator_size: float = 1.0
 
+## The prey must be at least this size to be eaten. Protects small/young
+## boids from predation — without this, only the relative size_ratio
+## below applies, which still allows eating very small prey as long as
+## the predator is proportionally bigger. 0 = no minimum.
+@export var minimum_prey_size: float = 0.0
+
 # The predator must be this much larger than its prey.
 @export var minimum_size_ratio: float = 1.25
 
@@ -159,6 +165,9 @@ func _find_food(
 		var prey_size: float = _get_boid_size(other)
 
 		if prey_size <= 0.0:
+			continue
+
+		if prey_size < minimum_prey_size:
 			continue
 
 

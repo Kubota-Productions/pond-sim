@@ -24,6 +24,11 @@ var speed: float = 0.0
 ## 1 = fastest.
 var speed_factor: float = 0.0
 
+# True when this module's genetic value was copied from a parent by
+# BoidBreedingModule via prepare_offspring(). Prevents initialize()
+# from re-rolling a random value over the inherited one.
+var _inherited: bool = false
+
 
 # =============================================================
 # INITIALIZE
@@ -31,10 +36,11 @@ var speed_factor: float = 0.0
 
 func initialize(boid: BoidBase) -> void:
 
-	speed = randf_range(
-		min_speed,
-		max_speed
-	)
+	if not _inherited:
+		speed = randf_range(
+			min_speed,
+			max_speed
+		)
 
 	if max_speed <= min_speed:
 		speed_factor = 1.0
@@ -119,7 +125,23 @@ func modify_speed(
 	current_speed: float
 ) -> float:
 
-	return speed
+	# NOTE: previously this returned `speed` outright, which silently
+	# discarded any multiplier already applied by a module earlier in
+	# the array (e.g. BoidIntelligenceModule's break slowdown) — the
+	# result depended entirely on module order in the inspector.
+	#
+	# Instead, treat `current_speed` as an accumulated multiplier chain
+	# relative to BoidBase's known default base speed, and apply this
+	# module's speed on top of that ratio. This makes the result the
+	# same regardless of where BoidSpeedModule sits in the modules array.
+	if BoidBase.DEFAULT_BASE_SPEED <= 0.0:
+		return speed
+
+	var multiplier: float = (
+		current_speed / BoidBase.DEFAULT_BASE_SPEED
+	)
+
+	return speed * multiplier
 
 
 # =============================================================
@@ -138,3 +160,41 @@ func modify_color(
 		Color.RED,
 		speed_factor
 	)
+
+
+# =============================================================
+# OFFSPRING
+# =============================================================
+
+func prepare_offspring(
+	offspring: BoidBase,
+	parent_a: BoidBase,
+	parent_b: BoidBase
+) -> void:
+
+	# Marks this module so initialize() doesn't overwrite the value
+	# applied by apply_inherited_state() (below) with a fresh random roll.
+	_inherited = true
+
+
+# =============================================================
+# INHERITED STATE
+# =============================================================
+# duplicate(true) does not copy non-@export vars, so `speed` would
+# otherwise come back at its script default (0.0) instead of the
+# parent's actual rolled value — leaving offspring unable to move at
+# all. BoidBreedingModule captures this on the live parent module and
+# re-applies it here on the offspring's copy.
+
+func get_inherited_state() -> Dictionary:
+	return {
+		"speed": speed,
+		"speed_factor": speed_factor,
+	}
+
+
+func apply_inherited_state(state: Dictionary) -> void:
+	if state.has("speed"):
+		speed = state["speed"]
+	if state.has("speed_factor"):
+		speed_factor = state["speed_factor"]

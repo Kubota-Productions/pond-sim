@@ -79,6 +79,16 @@ static var all_boids: Array[BoidBase] = []
 static var bounds: Rect2 = Rect2()
 
 
+# SPEED
+# The base speed every module's modify_speed() chain starts from.
+# Exposed as a named constant (instead of a magic number buried in
+# _get_max_speed) so modules like BoidSpeedModule can normalize
+# against it and apply their own speed as a multiplier rather than an
+# outright overwrite — which keeps the speed chain's result
+# independent of module ordering in the `modules` array.
+const DEFAULT_BASE_SPEED: float = 100.0
+
+
 # READY
 func _ready() -> void:
 
@@ -102,6 +112,43 @@ func _ready() -> void:
 	all_boids.append(self)
 
 	queue_redraw()
+
+func copy_base_configuration_from(
+	source: BoidBase
+) -> void:
+
+	if source == null:
+		return
+
+
+	# =========================================================
+	# FLOCKING
+	# =========================================================
+
+	max_force = source.max_force
+	perception_radius = source.perception_radius
+	separation_radius = source.separation_radius
+
+	separation_weight = source.separation_weight
+	alignment_weight = source.alignment_weight
+	cohesion_weight = source.cohesion_weight
+
+
+	# =========================================================
+	# EDGE AVOIDANCE
+	# =========================================================
+
+	edge_avoid_margin = source.edge_avoid_margin
+	edge_avoid_force = source.edge_avoid_force
+	edge_avoid_curve = source.edge_avoid_curve
+
+
+	# =========================================================
+	# BIOLOGY
+	# =========================================================
+
+	max_energy = source.max_energy
+	starting_energy = source.starting_energy
 
 
 # EXIT TREE
@@ -127,18 +174,60 @@ func _process(delta: float) -> void:
 		)
 
 		# A module may have called queue_free().
-		# Stop processing this boid immediately.
 		if is_queued_for_deletion():
 			return
 
+
+	# --------------------------------------------------
+	# DEAD BOID
+	# --------------------------------------------------
+
+	var age_module: BoidAgeModule = (
+		get_module_by_type(
+			BoidAgeModule
+		)
+	)
+
+	if age_module != null and age_module.is_dead:
+
+		# Make absolutely sure the corpse cannot move.
+		velocity = Vector2.ZERO
+		acceleration = Vector2.ZERO
+
+		# Keep the corpse at its current scale.
+		scale = _get_scale()
+
+		# Keep it black.
+		queue_redraw()
+
+		# IMPORTANT:
+		# Do NOT flock.
+		# Do NOT apply forces.
+		# Do NOT move.
+		# Do NOT wrap.
+		# Do NOT clamp.
+		return
+
+
+	# --------------------------------------------------
 	# FLOCK
+	# --------------------------------------------------
+
 	_flock()
 
+
+	# --------------------------------------------------
 	# EDGE AVOIDANCE
+	# --------------------------------------------------
+
 	if bounds.size != Vector2.ZERO:
 		_avoid_edges()
 
+
+	# --------------------------------------------------
 	# MODULE FORCES
+	# --------------------------------------------------
+
 	for module in modules:
 
 		if module == null:
@@ -148,11 +237,14 @@ func _process(delta: float) -> void:
 			self
 		)
 
-		# A future module could queue this boid for deletion.
 		if is_queued_for_deletion():
 			return
 
+
+	# --------------------------------------------------
 	# MOVEMENT
+	# --------------------------------------------------
+
 	velocity += acceleration * delta
 
 	velocity = velocity.limit_length(
@@ -161,33 +253,60 @@ func _process(delta: float) -> void:
 
 	position += velocity * delta
 
+
+	# --------------------------------------------------
 	# ROTATION
+	# --------------------------------------------------
+
 	if velocity.length_squared() > 0.01:
 
 		rotation = velocity.angle()
 
+
+	# --------------------------------------------------
 	# BOUNDS
+	# --------------------------------------------------
+
 	if bounds.size != Vector2.ZERO:
 
-		position.x = clamp(
-			position.x,
-			bounds.position.x,
-			bounds.end.x
-		)
+		if position.x < bounds.position.x:
 
-		position.y = clamp(
-			position.y,
-			bounds.position.y,
-			bounds.end.y
-		)
+			position.x = bounds.position.x
+			velocity.x = max(velocity.x, 0.0)
+
+		elif position.x > bounds.end.x:
+
+			position.x = bounds.end.x
+			velocity.x = min(velocity.x, 0.0)
+
+
+		if position.y < bounds.position.y:
+
+			position.y = bounds.position.y
+			velocity.y = max(velocity.y, 0.0)
+
+		elif position.y > bounds.end.y:
+
+			position.y = bounds.end.y
+			velocity.y = min(velocity.y, 0.0)
 
 	else:
 
 		_wrap_around()
 
+
+	# --------------------------------------------------
+	# VISUALS
+	# --------------------------------------------------
+
 	scale = _get_scale()
 
 	queue_redraw()
+
+
+	# --------------------------------------------------
+	# RESET ACCELERATION
+	# --------------------------------------------------
 
 	acceleration = Vector2.ZERO
 
@@ -345,7 +464,7 @@ func _flock() -> void:
 # GET MAX SPEED
 func _get_max_speed() -> float:
 
-	var speed: float = 100.0
+	var speed: float = DEFAULT_BASE_SPEED
 
 	for module in modules:
 

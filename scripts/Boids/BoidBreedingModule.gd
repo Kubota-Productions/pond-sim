@@ -9,6 +9,33 @@ class_name BoidBreedingModule
 @export var breeding_cooldown: float = 10.0
 
 
+@export_group("Population Control")
+
+## Hard ceiling on the global boid count. Breeding is skipped entirely
+## once BoidBase.boid_count reaches this. 0 = unlimited (not recommended —
+## with starting_energy above minimum_energy, growth is exponential and
+## will run away from your spawn_area with nothing else to check it).
+@export var max_population: int = 400
+
+
+@export_group("Maturity Requirements")
+
+## Minimum age (seconds, from BoidAgeModule.age) required before a boid
+## may breed. Skipped if the boid has no BoidAgeModule.
+@export var minimum_breeding_age: float = 0.0
+
+## If true, a boid must be fully grown (BoidAgeModule.growth_progress
+## >= 1.0) before it may breed. Skipped if the boid has no BoidAgeModule.
+@export var require_full_growth: bool = true
+
+## Minimum BoidSizeModule.size required before a boid may breed. This is
+## the boid's rolled genetic size trait (see BoidSizeModule), separate
+## from growth progress — use it if you want only your larger-rolled
+## individuals breeding, on top of / instead of maturity. 0 = no
+## requirement. Skipped if the boid has no BoidSizeModule.
+@export var minimum_breeding_size: float = 0.0
+
+
 @export_group("Energy Requirements")
 
 @export var minimum_energy: float = 70.0
@@ -28,7 +55,12 @@ var breeding_timer: float = 0.0
 # =============================================================
 
 func initialize(boid: BoidBase) -> void:
-	breeding_timer = 1
+
+	# Jittered instead of a flat "1" so every boid spawned in the same
+	# burst doesn't become breeding-eligible at the exact same instant.
+	# A flat grace period synchronizes offspring into bursts, which is
+	# part of what drives runaway exponential growth.
+	breeding_timer = randf_range(0.5, 1.5)
 
 
 # =============================================================
@@ -43,11 +75,24 @@ func update(
 	if not enabled:
 		return
 
+	# POPULATION CAP
+	# Checked before anything else — cheapest possible early-out, and
+	# the one thing standing between this system and unbounded growth
+	# if predation isn't culling boids fast enough.
+	if (
+		max_population > 0
+		and BoidBase.boid_count >= max_population
+	):
+		return
+
 	if breeding_timer > 0.0:
 		breeding_timer -= delta
 		return
 
 	if boid.energy < minimum_energy:
+		return
+
+	if not _is_mature(boid):
 		return
 
 	var mate: BoidBase = _find_mate(boid)
@@ -56,6 +101,48 @@ func update(
 		return
 
 	_breed(boid, mate)
+
+
+# =============================================================
+# MATURITY
+# =============================================================
+
+func _is_mature(
+	boid: BoidBase
+) -> bool:
+
+	var age_module: BoidAgeModule = (
+		boid.get_module_by_type(
+			BoidAgeModule
+		)
+	)
+
+	if age_module != null:
+
+		if age_module.age < minimum_breeding_age:
+			return false
+
+		if (
+			require_full_growth
+			and age_module.growth_progress < 1.0
+		):
+			return false
+
+	if minimum_breeding_size > 0.0:
+
+		var size_module: BoidSizeModule = (
+			boid.get_module_by_type(
+				BoidSizeModule
+			)
+		)
+
+		if (
+			size_module != null
+			and size_module.size < minimum_breeding_size
+		):
+			return false
+
+	return true
 
 
 # =============================================================
@@ -83,6 +170,14 @@ func _find_mate(
 		if other == boid:
 			continue
 
+		# IMPORTANT:
+		# queue_free() is deferred, so a freed boid (e.g. one that was
+		# just eaten this same frame) can remain in all_boids briefly.
+		# Without this check a boid could be picked as a mate the exact
+		# frame it's being removed from the scene.
+		if other.is_queued_for_deletion():
+			continue
+
 		var other_breeding: BoidBreedingModule = (
 			other.get_module_by_type(
 				BoidBreedingModule
@@ -99,6 +194,9 @@ func _find_mate(
 			continue
 
 		if other.energy < other_breeding.minimum_energy:
+			continue
+
+		if not other_breeding._is_mature(other):
 			continue
 
 		var distance: float = (
@@ -156,6 +254,12 @@ func _breed(
 	if mate.energy < minimum_energy:
 		return
 
+	if not _is_mature(boid):
+		return
+
+	if not _is_mature(mate):
+		return
+
 
 	var parent: Node = boid.get_parent()
 
@@ -168,6 +272,7 @@ func _breed(
 	# ---------------------------------------------------------
 
 	var offspring: BoidBase = BoidBase.new()
+	offspring.copy_base_configuration_from(boid)
 
 	# Give the offspring inherited modules BEFORE adding it
 	# to the scene tree.
@@ -175,6 +280,21 @@ func _breed(
 		boid,
 		mate
 	)
+
+	# Let every inherited module know it's being carried over from a
+	# parent, so it can preserve genetic state (e.g. size/speed/
+	# intelligence) instead of having initialize() re-roll it below
+	# when the offspring enters the tree.
+	for module in offspring.modules:
+
+		if module == null:
+			continue
+
+		module.prepare_offspring(
+			offspring,
+			boid,
+			mate
+		)
 
 	# Spawn halfway between parents.
 	offspring.position = (
@@ -251,12 +371,21 @@ func _inherit_modules(
 			# Only parent A has this module.
 			selected_module = module_a
 
+		# Capture runtime state (rolled speed/size/intelligence/etc.)
+		# from the LIVE selected module before duplicating it — see
+		# BoidModifierModule.get_inherited_state() for why this can't
+		# just be left to duplicate() itself.
+		var state_a: Dictionary = (
+			selected_module.get_inherited_state()
+		)
+
 		var copy: BoidModifierModule = (
 			selected_module.duplicate(true)
 			as BoidModifierModule
 		)
 
 		if copy != null:
+			copy.apply_inherited_state(state_a)
 			inherited.append(copy)
 
 
@@ -279,12 +408,17 @@ func _inherit_modules(
 		if already_inherited:
 			continue
 
+		var state_b: Dictionary = (
+			module_b.get_inherited_state()
+		)
+
 		var copy: BoidModifierModule = (
 			module_b.duplicate(true)
 			as BoidModifierModule
 		)
 
 		if copy != null:
+			copy.apply_inherited_state(state_b)
 			inherited.append(copy)
 
 

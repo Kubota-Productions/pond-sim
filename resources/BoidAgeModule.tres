@@ -5,8 +5,8 @@
 [resource]
 resource_local_to_scene = true
 script = ExtResource("1_dq62y")
-minimum_age = 10.0
+minimum_age = 4.0
 maximum_age = 25.0
 starting_size_ratio = 0.05
-growth_duration = 15.0
+growth_duration = 5.0
 metadata/_custom_type_script = "uid://b2nw0np8cywiq"
