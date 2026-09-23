@@ -1,0 +1,6 @@
+[gd_resource type="Resource" script_class="BoidModifierModule" format=3 uid="uid://y8ld6kbinmx2"]
+
+[ext_resource type="Script" uid="uid://ke87smhc7f7b" path="res://scripts/Boids/BoidModifierModule.gd" id="1_jajgg"]
+
+[resource]
+script = ExtResource("1_jajgg")

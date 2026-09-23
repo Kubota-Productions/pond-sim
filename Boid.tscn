@@ -1,0 +1,22 @@
+[gd_scene format=3 uid="uid://c2a8h4i0hl08u"]
+
+[ext_resource type="Script" uid="uid://bx0c5qq62l68m" path="res://scripts/Boids/BoidBase.gd" id="1_ur8rf"]
+[ext_resource type="Script" uid="uid://ke87smhc7f7b" path="res://scripts/Boids/BoidModifierModule.gd" id="2_t23lk"]
+[ext_resource type="Resource" uid="uid://cqp220iwhq62o" path="res://resources/BoidIntelligenceModule.tres" id="3_t23lk"]
+[ext_resource type="Resource" uid="uid://b3c00y715cpb" path="res://resources/BoidSpeedModule.tres" id="4_y3sew"]
+[ext_resource type="Resource" uid="uid://y8ld6kbinmx2" path="res://resources/BoidModiferModule.tres" id="5_y3sew"]
+[ext_resource type="Resource" uid="uid://co51t4boq4mw4" path="res://resources/BoidSizeModule.tres" id="6_pgf3i"]
+[ext_resource type="Resource" uid="uid://do0dg547sbmuo" path="res://resources/BoidsConsumptionModule.tres" id="7_8s7r8"]
+[ext_resource type="Resource" uid="uid://cmh7xa1obghdy" path="res://resources/BoidBreedingModule.tres" id="8_58s6u"]
+[ext_resource type="Resource" uid="uid://bho75lt434e0y" path="res://resources/BoidGrowthModule.tres" id="9_a3mqa"]
+[ext_resource type="Resource" uid="uid://c8mrg71ckro1i" path="res://resources/BoidAgeModule.tres" id="10_7a3us"]
+
+[node name="FlockBoid" type="Node2D" unique_id=1400672770]
+script = ExtResource("1_ur8rf")
+modules = Array[ExtResource("2_t23lk")]([ExtResource("5_y3sew"), ExtResource("9_a3mqa"), ExtResource("6_pgf3i"), ExtResource("4_y3sew"), ExtResource("7_8s7r8"), ExtResource("3_t23lk"), ExtResource("8_58s6u"), ExtResource("10_7a3us")])
+separation_weight = 2.0
+alignment_weight = 2.0
+cohesion_weight = 2.0
+edge_avoid_margin = 100.0
+edge_avoid_force = 2000.0
+edge_avoid_curve = 1.0

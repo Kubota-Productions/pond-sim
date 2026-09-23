@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="BoidIntelligenceModule" format=3 uid="uid://cqp220iwhq62o"]
+
+[ext_resource type="Script" uid="uid://cjnhliqfbcxwb" path="res://scripts/Boids/BoidIntelligenceModule.gd" id="1_hagre"]
+
+[resource]
+resource_local_to_scene = true
+script = ExtResource("1_hagre")

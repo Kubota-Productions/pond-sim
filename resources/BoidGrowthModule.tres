@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="BoidGrowthModule" format=3 uid="uid://bho75lt434e0y"]
+
+[ext_resource type="Script" uid="uid://c12rvd6s0do24" path="res://scripts/Boids/BoidGrowthModule.gd" id="1_ab1uw"]
+
+[resource]
+script = ExtResource("1_ab1uw")
+maximum_size = 2.0
+growth_rate = 0.001

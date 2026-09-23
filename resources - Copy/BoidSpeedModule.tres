@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="BoidSpeedModule" format=3 uid="uid://b3c00y715cpb"]
+
+[ext_resource type="Script" uid="uid://08ltma314oj5" path="res://scripts/Boids/BoidSpeedModule.gd" id="1_10ss1"]
+
+[resource]
+resource_local_to_scene = true
+script = ExtResource("1_10ss1")
+max_speed = 800.0

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="BoidBreedingModule" format=3 uid="uid://cmh7xa1obghdy"]
+
+[ext_resource type="Script" uid="uid://dop4kt85bqs1k" path="res://scripts/Boids/BoidBreedingModule.gd" id="1_kogul"]
+
+[resource]
+script = ExtResource("1_kogul")
+breeding_radius = 1.0
+breeding_cooldown = 5.0
+minimum_energy = 10.0
+maximum_size_difference = 0.1
+metadata/_custom_type_script = "uid://dop4kt85bqs1k"
