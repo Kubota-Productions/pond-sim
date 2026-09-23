@@ -5,7 +5,6 @@
 [resource]
 resource_local_to_scene = true
 script = ExtResource("1_10ss1")
-min_speed = 50.0
 max_speed = 500.0
 clustering_weight = 10.0
 similarity_range = 0.09999999999999999

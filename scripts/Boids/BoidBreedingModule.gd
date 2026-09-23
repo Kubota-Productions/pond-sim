@@ -8,13 +8,16 @@ class_name BoidBreedingModule
 @export var breeding_radius: float = 30.0
 @export var breeding_cooldown: float = 10.0
 
-## How often a boid re-searches for a mate once its cooldown is up but no
-## mate was found nearby. Without this, a boid with no mate in range would
-## call _find_mate() (a grid query) on EVERY SINGLE FRAME indefinitely,
-## since breeding_timer only resets on a successful breed, not a failed
-## search — at high population counts that's a much bigger steady-state
-## cost than the cooldown alone suggests.
+## How often a boid re-searches for a mate after failing to find one.
 @export var search_retry_interval: float = 0.25
+
+
+@export_group("Population")
+
+## Maximum number of living boids allowed.
+## Breeding stops when this population is reached.
+## 0 = unlimited.
+@export var population_limit: int = 400
 
 
 @export_group("Energy Requirements")
@@ -30,8 +33,6 @@ class_name BoidBreedingModule
 
 var breeding_timer: float = 0.0
 
-## Reused across calls instead of letting _find_mate() allocate a fresh
-## array every time it runs.
 var _nearby_scratch: Array[BoidBase] = []
 
 var _search_retry_timer: float = 0.0
@@ -42,7 +43,8 @@ var _search_retry_timer: float = 0.0
 # =============================================================
 
 func initialize(boid: BoidBase) -> void:
-	breeding_timer = 1
+	breeding_timer = 1.0
+	_search_retry_timer = 0.0
 
 
 # =============================================================
@@ -57,6 +59,13 @@ func update(
 	if not enabled:
 		return
 
+	# Population limit.
+	if (
+		population_limit > 0
+		and BoidBase.boid_count >= population_limit
+	):
+		return
+
 	if breeding_timer > 0.0:
 		breeding_timer -= delta
 		return
@@ -64,8 +73,7 @@ func update(
 	if boid.energy < minimum_energy:
 		return
 
-	# Throttle retries instead of searching again on every single frame
-	# while no mate is in range.
+	# Throttle failed mate searches.
 	if _search_retry_timer > 0.0:
 		_search_retry_timer -= delta
 		return
@@ -100,9 +108,6 @@ func _find_mate(
 		breeding_radius * breeding_radius
 	)
 
-	# Was: loop every boid in BoidBase.all_boids. Now: only boids the
-	# spatial grid says are actually within breeding_radius, filled into
-	# a reused array instead of allocating a new one each call.
 	BoidBase.query_radius_into(
 		boid.position,
 		breeding_radius,
@@ -111,7 +116,24 @@ func _find_mate(
 
 	for other in _nearby_scratch:
 
+		# queue_free() is deferred, so always validate before
+		# accessing the object.
+		if not is_instance_valid(other):
+			continue
+
 		if other == boid:
+			continue
+
+		if other.is_queued_for_deletion():
+			continue
+
+		var other_age: BoidAgeModule = (
+			other.get_module_by_type(
+				BoidAgeModule
+			)
+		)
+
+		if other_age != null and other_age.is_dead:
 			continue
 
 		var other_breeding: BoidBreedingModule = (
@@ -175,6 +197,9 @@ func _breed(
 	if not is_instance_valid(mate):
 		return
 
+	if mate.is_queued_for_deletion():
+		return
+
 	if not boid.is_inside_tree():
 		return
 
@@ -187,6 +212,15 @@ func _breed(
 	if mate.energy < minimum_energy:
 		return
 
+	# Re-check the population immediately before spawning.
+	#
+	# This is important because multiple boids can reach _breed()
+	# during the same frame.
+	if (
+		population_limit > 0
+		and BoidBase.boid_count >= population_limit
+	):
+		return
 
 	var parent: Node = boid.get_parent()
 
@@ -200,14 +234,22 @@ func _breed(
 
 	var offspring: BoidBase = BoidBase.new()
 
-	# Give the offspring inherited modules BEFORE adding it
-	# to the scene tree.
+	# Create inherited modules before the offspring enters
+	# the scene tree.
 	offspring.modules = _inherit_modules(
+		offspring,
 		boid,
 		mate
 	)
 
-	# Spawn halfway between parents.
+	# Inherit the base BoidBase configuration.
+	_inherit_base_stats(
+		offspring,
+		boid,
+		mate
+	)
+
+	# Spawn halfway between the parents.
 	offspring.position = (
 		boid.position
 		+ mate.position
@@ -247,14 +289,16 @@ func _breed(
 # =============================================================
 
 func _inherit_modules(
+	offspring: BoidBase,
 	parent_a: BoidBase,
 	parent_b: BoidBase
 ) -> Array[BoidModifierModule]:
 
 	var inherited: Array[BoidModifierModule] = []
 
+
 	# ---------------------------------------------------------
-	# FIRST PARENT
+	# MODULES FROM FIRST PARENT
 	# ---------------------------------------------------------
 
 	for module_a in parent_a.modules:
@@ -272,15 +316,19 @@ func _inherit_modules(
 		var selected_module: BoidModifierModule
 
 		if module_b != null:
+
 			# Both parents have this module.
 			# Randomly inherit one parent's version.
 			if randf() < 0.5:
 				selected_module = module_a
 			else:
 				selected_module = module_b
+
 		else:
+
 			# Only parent A has this module.
 			selected_module = module_a
+
 
 		var copy: BoidModifierModule = (
 			selected_module.duplicate(true)
@@ -288,6 +336,18 @@ func _inherit_modules(
 		)
 
 		if copy != null:
+
+			# Give the module a chance to reset or configure
+			# developmental state for the offspring.
+			#
+			# This is important for modules such as
+			# BoidGrowthModule.
+			copy.prepare_offspring(
+				offspring,
+				parent_a,
+				parent_b
+			)
+
 			inherited.append(copy)
 
 
@@ -310,16 +370,119 @@ func _inherit_modules(
 		if already_inherited:
 			continue
 
+
 		var copy: BoidModifierModule = (
 			module_b.duplicate(true)
 			as BoidModifierModule
 		)
 
 		if copy != null:
+
+			copy.prepare_offspring(
+				offspring,
+				parent_a,
+				parent_b
+			)
+
 			inherited.append(copy)
 
 
 	return inherited
+
+
+# =============================================================
+# INHERIT BASE STATS
+# =============================================================
+
+func _inherit_base_stats(
+	offspring: BoidBase,
+	parent_a: BoidBase,
+	parent_b: BoidBase
+) -> void:
+
+	# ---------------------------------------------------------
+	# FLOCKING
+	# ---------------------------------------------------------
+
+	offspring.max_force = _inherit_stat(
+		parent_a.max_force,
+		parent_b.max_force
+	)
+
+	offspring.perception_radius = _inherit_stat(
+		parent_a.perception_radius,
+		parent_b.perception_radius
+	)
+
+	offspring.separation_radius = _inherit_stat(
+		parent_a.separation_radius,
+		parent_b.separation_radius
+	)
+
+	offspring.separation_weight = _inherit_stat(
+		parent_a.separation_weight,
+		parent_b.separation_weight
+	)
+
+	offspring.alignment_weight = _inherit_stat(
+		parent_a.alignment_weight,
+		parent_b.alignment_weight
+	)
+
+	offspring.cohesion_weight = _inherit_stat(
+		parent_a.cohesion_weight,
+		parent_b.cohesion_weight
+	)
+
+
+	# ---------------------------------------------------------
+	# EDGE AVOIDANCE
+	# ---------------------------------------------------------
+
+	offspring.edge_avoid_margin = _inherit_stat(
+		parent_a.edge_avoid_margin,
+		parent_b.edge_avoid_margin
+	)
+
+	offspring.edge_avoid_force = _inherit_stat(
+		parent_a.edge_avoid_force,
+		parent_b.edge_avoid_force
+	)
+
+	offspring.edge_avoid_curve = _inherit_stat(
+		parent_a.edge_avoid_curve,
+		parent_b.edge_avoid_curve
+	)
+
+
+	# ---------------------------------------------------------
+	# ENERGY
+	# ---------------------------------------------------------
+
+	offspring.max_energy = _inherit_stat(
+		parent_a.max_energy,
+		parent_b.max_energy
+	)
+
+	offspring.starting_energy = _inherit_stat(
+		parent_a.starting_energy,
+		parent_b.starting_energy
+	)
+
+
+# =============================================================
+# INHERIT ONE STAT
+# =============================================================
+
+func _inherit_stat(
+	value_a: float,
+	value_b: float
+) -> float:
+
+	if randf() < 0.5:
+		return value_a
+
+	return value_b
 
 
 # =============================================================

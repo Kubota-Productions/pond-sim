@@ -13,10 +13,7 @@
 [node name="FlockBoid" type="Node2D" unique_id=1400672770]
 script = ExtResource("1_ur8rf")
 modules = Array[ExtResource("2_7a3us")]([ExtResource("7_slkiq"), ExtResource("9_o8igv"), ExtResource("10_imadf"), ExtResource("5_bugqg"), ExtResource("4_dyl04"), ExtResource("8_2yvxm"), ExtResource("3_2qxn4")])
-perception_radius = 300.0
-separation_radius = 30.0
-separation_weight = 3.0
-alignment_weight = 4.5
-cohesion_weight = 4.5
+perception_radius = 70.0
+cohesion_weight = 3.0
 edge_avoid_force = 1000.0
 edge_avoid_curve = 1.0

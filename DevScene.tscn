@@ -14,7 +14,7 @@ script = ExtResource("5_uil01")
 [node name="Node2D" type="Node2D" parent="." unique_id=1176570652]
 script = ExtResource("1_bva37")
 boid_scene = ExtResource("2_215fb")
-spawn_area = Rect2(0, 0, 3840, 2000)
+spawn_area = Rect2(0, 0, 3840, 2100)
 
 [node name="Camera2D" type="Camera2D" parent="Node2D" unique_id=2096432904]
 position = Vector2(960, 545)
