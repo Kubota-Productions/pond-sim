@@ -9,6 +9,14 @@ class_name BoidConsumptionModule
 @export var eating_distance: float = 12.0
 @export var consumption_cooldown: float = 2.0
 
+## How often a boid re-searches for food once it's hungry but has no
+## current target. Without this, any predator-sized boid with no target
+## calls _find_food() (a grid query) on EVERY SINGLE FRAME until it finds
+## something — the cooldown only applies after a successful meal, so this
+## is the actual steady-state hot path, not the occasional check it looks
+## like at a glance.
+@export var search_retry_interval: float = 0.25
+
 
 @export_group("Size Requirement")
 
@@ -34,6 +42,12 @@ class_name BoidConsumptionModule
 
 var target: BoidBase = null
 var consumption_timer: float = 0.0
+
+## Reused across calls instead of letting _find_food() allocate a fresh
+## array every time it runs.
+var _nearby_scratch: Array[BoidBase] = []
+
+var _search_retry_timer: float = 0.0
 
 
 # INITIALIZE
@@ -99,7 +113,16 @@ func update(
 
 	if not is_instance_valid(target):
 
-		target = _find_food(boid)
+		# Throttle retries instead of searching again on every single
+		# frame while no target is in range.
+		if _search_retry_timer > 0.0:
+
+			_search_retry_timer -= delta
+
+		else:
+
+			target = _find_food(boid)
+			_search_retry_timer = search_retry_interval
 
 
 	# --------------------------------------------------
@@ -142,13 +165,15 @@ func _find_food(
 	)
 
 	# Was: loop every boid in BoidBase.all_boids. Now: only boids the
-	# spatial grid says are actually within detection_radius.
-	var nearby: Array[BoidBase] = BoidBase.query_radius(
+	# spatial grid says are actually within detection_radius, filled into
+	# a reused array instead of allocating a new one each call.
+	BoidBase.query_radius_into(
 		boid.position,
-		detection_radius
+		detection_radius,
+		_nearby_scratch
 	)
 
-	for other in nearby:
+	for other in _nearby_scratch:
 
 		if other == boid:
 			continue

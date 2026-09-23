@@ -7,4 +7,4 @@ resource_local_to_scene = true
 script = ExtResource("1_63gqn")
 min_size = 2.0
 max_size = 3.0
-clustering_weight = 4.0
+clustering_weight = 10.0

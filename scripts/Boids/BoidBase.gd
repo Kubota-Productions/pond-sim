@@ -70,6 +70,16 @@ var break_origin: Vector2
 ## boid-pair check in the simulation.
 var _module_cache: Dictionary = {}
 
+## Reused every frame by _flock() so it doesn't allocate a fresh Array on
+## every single call (that's 700+ allocations/frame at 700 boids, since
+## flocking runs unconditionally for every boid every frame).
+var _nearby_scratch: Array[BoidBase] = []
+
+## Color this boid should be drawn with this frame, computed once here and
+## read by BoidRenderer's single batched draw call instead of each boid
+## doing its own draw_colored_polygon() call.
+var draw_color: Color = Color.WHITE
+
 
 # GLOBAL FLOCK
 static var all_boids: Array[BoidBase] = []
@@ -116,7 +126,14 @@ static func _rebuild_grid_if_stale() -> void:
 		return
 
 	_grid_frame = current_frame
-	_grid.clear()
+
+	# Reuse each cell's existing bucket array instead of replacing it with a
+	# brand new Array every frame. Boids tend to stay in roughly the same
+	# handful of cells from one frame to the next, so this keeps the same
+	# backing arrays alive and just empties them, instead of allocating a
+	# fresh array per used cell (up to ~boid_count of them) every frame.
+	for cell in _grid.keys():
+		(_grid[cell] as Array).clear()
 
 	for boid in all_boids:
 
@@ -131,20 +148,23 @@ static func _rebuild_grid_if_stale() -> void:
 		if not _grid.has(cell):
 			_grid[cell] = []
 
-		_grid[cell].append(boid)
+		(_grid[cell] as Array).append(boid)
 
 
-## Returns every valid, non-freed boid within `radius` of `center`,
-## including the caller if it's in range (callers should skip `other == self`
-## the same way they already did when iterating all_boids directly).
-static func query_radius(
+## Fills `result` with every valid, non-freed boid within `radius` of
+## `center` (clearing it first), instead of returning a freshly allocated
+## array. Use this in hot paths — anything that runs every frame for every
+## boid, like _flock() — paired with a persistent scratch array on the
+## caller, to avoid allocating a new array on every single call.
+static func query_radius_into(
 	center: Vector2,
-	radius: float
-) -> Array[BoidBase]:
+	radius: float,
+	result: Array[BoidBase]
+) -> void:
 
 	_rebuild_grid_if_stale()
 
-	var result: Array[BoidBase] = []
+	result.clear()
 
 	var cell_radius: int = int(ceil(radius / grid_cell_size))
 	var center_cell: Vector2i = _cell_coords(center)
@@ -168,6 +188,17 @@ static func query_radius(
 
 				result.append(boid)
 
+
+## Convenience wrapper for call sites that aren't hot paths (e.g. gated
+## behind a cooldown, so they don't run every frame for every boid) where
+## allocating a fresh array each call is fine.
+static func query_radius(
+	center: Vector2,
+	radius: float
+) -> Array[BoidBase]:
+
+	var result: Array[BoidBase] = []
+	query_radius_into(center, radius, result)
 	return result
 
 
@@ -203,7 +234,7 @@ func _ready() -> void:
 	all_boids.append(self)
 	boid_count += 1
 
-	queue_redraw()
+	draw_color = _compute_draw_color()
 
 
 # EXIT TREE
@@ -290,7 +321,7 @@ func _process(delta: float) -> void:
 
 	scale = _get_scale()
 
-	queue_redraw()
+	draw_color = _compute_draw_color()
 
 	acceleration = Vector2.ZERO
 
@@ -309,13 +340,16 @@ func _flock() -> void:
 	var separation_radius_sq: float = separation_radius * separation_radius
 
 	# Was: loop every boid in the flock (O(n) per boid, O(n^2) total).
-	# Now: only boids the spatial grid says could plausibly be nearby.
-	var nearby: Array[BoidBase] = BoidBase.query_radius(
+	# Now: only boids the spatial grid says could plausibly be nearby,
+	# filled into a reused scratch array so this doesn't allocate every
+	# single frame for every boid.
+	BoidBase.query_radius_into(
 		position,
-		perception_radius
+		perception_radius,
+		_nearby_scratch
 	)
 
-	for other in nearby:
+	for other in _nearby_scratch:
 
 		if other == self:
 			continue
@@ -651,18 +685,19 @@ func _wrap_around() -> void:
 		position.y = 0.0
 
 
-# DRAW
-func _draw() -> void:
-
-	var points: PackedVector2Array = PackedVector2Array([
-		Vector2(10, 0),
-		Vector2(-6, 5),
-		Vector2(-6, -5)
-	])
+# DRAW COLOR
+#
+# Boids no longer draw themselves individually — at hundreds of boids, one
+# CanvasItem._draw() call per boid (times one per frame, since the old code
+# called queue_redraw() unconditionally every frame) became the bottleneck
+# in its own right. BoidRenderer.gd now draws every boid in a single batched
+# MultiMesh draw call instead, reading position/rotation/scale directly and
+# this cached color, which still runs every module's modify_color() hook
+# exactly as before.
+func _compute_draw_color() -> Color:
 
 	var color: Color = Color.WHITE
 
-	# Give every module a chance to modify appearance.
 	for module in modules:
 
 		if module == null:
@@ -673,10 +708,7 @@ func _draw() -> void:
 			color
 		)
 
-	draw_colored_polygon(
-		points,
-		color
-	)
+	return color
 
 
 # GET SCALE

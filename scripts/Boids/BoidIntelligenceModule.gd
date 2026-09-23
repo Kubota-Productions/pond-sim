@@ -1,11 +1,11 @@
 extends BoidModifierModule
-class_name BoidStaminaModule
+class_name BoidIntelligenceModule
 
 
-@export_group("Stamina")
+@export_group("Intelligence")
 
-@export_range(0.0, 1.0) var min_stamina: float = 0.2
-@export_range(0.0, 1.0) var max_stamina: float = 1.0
+@export_range(0.0, 1.0) var min_intelligence: float = 0.2
+@export_range(0.0, 1.0) var max_intelligence: float = 1.0
 
 
 @export_group("Breaks")
@@ -33,12 +33,19 @@ class_name BoidStaminaModule
 ## How quickly break desire increases.
 @export var break_urge_growth: float = 1.5
 
+## How often a boid re-checks the group once it's past its preferred break
+## interval but hasn't found enough nearby boids ready for a break yet.
+## Without this, that check (a grid query) runs on EVERY SINGLE FRAME from
+## the moment the interval passes until a group break actually triggers —
+## which, at high population counts, is most of the flock most of the time.
+@export var group_check_retry_interval: float = 0.25
+
 
 # =============================================================
 # STATE
 # =============================================================
 
-var stamina: float = 1.0
+var intelligence: float = 1.0
 
 var time_since_break: float = 0.0
 var break_urge: float = 0.0
@@ -48,6 +55,12 @@ var break_timer: float = 0.0
 
 var break_origin: Vector2
 
+## Reused across calls instead of letting _count_ready_boids() allocate a
+## fresh array every time it runs.
+var _nearby_scratch: Array[BoidBase] = []
+
+var _group_check_retry_timer: float = 0.0
+
 
 # =============================================================
 # INITIALIZE
@@ -55,9 +68,9 @@ var break_origin: Vector2
 
 func initialize(boid: BoidBase) -> void:
 
-	stamina = randf_range(
-		min_stamina,
-		max_stamina
+	intelligence = randf_range(
+		min_intelligence,
+		max_intelligence
 	)
 
 	time_since_break = 0.0
@@ -90,14 +103,14 @@ func update(
 
 	time_since_break += delta
 
-	var stamina_factor: float = (
-		1.0 - stamina
+	var intelligence_factor: float = (
+		1.0 - intelligence
 	)
 
 	var preferred_interval: float = lerp(
 		break_interval_max,
 		break_interval_min,
-		stamina_factor
+		intelligence_factor
 	)
 
 	if time_since_break < preferred_interval:
@@ -123,6 +136,16 @@ func update(
 	# ---------------------------------------------------------
 	# CHECK GROUP
 	# ---------------------------------------------------------
+
+	# Throttle the grid query instead of re-checking the group on every
+	# single frame once past preferred_interval. break_urge above still
+	# updates every frame from delta-accumulated time, so the ramp-up feel
+	# is unaffected — only how often we ask "is the group ready yet?" changes.
+	if _group_check_retry_timer > 0.0:
+		_group_check_retry_timer -= delta
+		return
+
+	_group_check_retry_timer = group_check_retry_interval
 
 	var ready_count: int = _count_ready_boids(boid)
 
@@ -162,29 +185,31 @@ func _count_ready_boids(
 
 	# Was: loop every boid in BoidBase.all_boids (O(n) per call, and this
 	# is called from update() for potentially every boid). Now: only the
-	# boids the spatial grid says are actually within break_group_radius.
-	var nearby: Array[BoidBase] = BoidBase.query_radius(
+	# boids the spatial grid says are actually within break_group_radius,
+	# filled into a reused array instead of allocating a new one each call.
+	BoidBase.query_radius_into(
 		boid.position,
-		break_group_radius
+		break_group_radius,
+		_nearby_scratch
 	)
 
-	for other in nearby:
+	for other in _nearby_scratch:
 
 		if other == boid:
 			continue
 
 
-		var other_stamina: BoidStaminaModule = (
+		var other_intelligence: BoidIntelligenceModule = (
 			other.get_module_by_type(
-				BoidStaminaModule
+				BoidIntelligenceModule
 			)
 		)
 
-		if other_stamina == null:
+		if other_intelligence == null:
 			continue
 
 
-		if other_stamina.is_taking_break:
+		if other_intelligence.is_taking_break:
 			continue
 
 
@@ -198,7 +223,7 @@ func _count_ready_boids(
 			continue
 
 
-		if other_stamina.break_urge > 0.0:
+		if other_intelligence.break_urge > 0.0:
 			count += 1
 
 

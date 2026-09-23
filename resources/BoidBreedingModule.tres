@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_kogul")
-breeding_cooldown = 2.0
+breeding_cooldown = 5.0
 minimum_energy = 5.0
 energy_cost = 2.0
 metadata/_custom_type_script = "uid://dop4kt85bqs1k"

@@ -8,6 +8,14 @@ class_name BoidBreedingModule
 @export var breeding_radius: float = 30.0
 @export var breeding_cooldown: float = 10.0
 
+## How often a boid re-searches for a mate once its cooldown is up but no
+## mate was found nearby. Without this, a boid with no mate in range would
+## call _find_mate() (a grid query) on EVERY SINGLE FRAME indefinitely,
+## since breeding_timer only resets on a successful breed, not a failed
+## search — at high population counts that's a much bigger steady-state
+## cost than the cooldown alone suggests.
+@export var search_retry_interval: float = 0.25
+
 
 @export_group("Energy Requirements")
 
@@ -21,6 +29,12 @@ class_name BoidBreedingModule
 
 
 var breeding_timer: float = 0.0
+
+## Reused across calls instead of letting _find_mate() allocate a fresh
+## array every time it runs.
+var _nearby_scratch: Array[BoidBase] = []
+
+var _search_retry_timer: float = 0.0
 
 
 # =============================================================
@@ -50,9 +64,16 @@ func update(
 	if boid.energy < minimum_energy:
 		return
 
+	# Throttle retries instead of searching again on every single frame
+	# while no mate is in range.
+	if _search_retry_timer > 0.0:
+		_search_retry_timer -= delta
+		return
+
 	var mate: BoidBase = _find_mate(boid)
 
 	if mate == null:
+		_search_retry_timer = search_retry_interval
 		return
 
 	_breed(boid, mate)
@@ -80,13 +101,15 @@ func _find_mate(
 	)
 
 	# Was: loop every boid in BoidBase.all_boids. Now: only boids the
-	# spatial grid says are actually within breeding_radius.
-	var nearby: Array[BoidBase] = BoidBase.query_radius(
+	# spatial grid says are actually within breeding_radius, filled into
+	# a reused array instead of allocating a new one each call.
+	BoidBase.query_radius_into(
 		boid.position,
-		breeding_radius
+		breeding_radius,
+		_nearby_scratch
 	)
 
-	for other in nearby:
+	for other in _nearby_scratch:
 
 		if other == boid:
 			continue

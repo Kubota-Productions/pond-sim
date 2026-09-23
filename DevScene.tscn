@@ -4,8 +4,12 @@
 [ext_resource type="PackedScene" uid="uid://c2a8h4i0hl08u" path="res://Boid.tscn" id="2_215fb"]
 [ext_resource type="Script" uid="uid://7t46wu03ejvu" path="res://scripts/Camera/CameraController.gd" id="2_gqwpr"]
 [ext_resource type="Script" uid="uid://b77kp2x8fyr0k" path="res://scripts/Counter.gd" id="5_s3l4w"]
+[ext_resource type="Script" uid="uid://cnj81hb61xips" path="res://BoidRenderer.gd" id="5_uil01"]
 
 [node name="Node2D" type="Node2D" unique_id=1045617605]
+
+[node name="MultiMeshInstance2D" type="MultiMeshInstance2D" parent="." unique_id=583462039]
+script = ExtResource("5_uil01")
 
 [node name="Node2D" type="Node2D" parent="." unique_id=1176570652]
 script = ExtResource("1_bva37")
