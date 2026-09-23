@@ -4,4 +4,4 @@
 
 [resource]
 script = ExtResource("1_2p0nm")
-minimum_prey_size = 1.0
+minimum_predator_size = 0.5

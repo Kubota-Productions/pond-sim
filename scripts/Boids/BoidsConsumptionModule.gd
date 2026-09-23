@@ -15,12 +15,6 @@ class_name BoidConsumptionModule
 # The predator must be at least this size to eat.
 @export var minimum_predator_size: float = 1.0
 
-## The prey must be at least this size to be eaten. Protects small/young
-## boids from predation — without this, only the relative size_ratio
-## below applies, which still allows eating very small prey as long as
-## the predator is proportionally bigger. 0 = no minimum.
-@export var minimum_prey_size: float = 0.0
-
 # The predator must be this much larger than its prey.
 @export var minimum_size_ratio: float = 1.25
 
@@ -114,13 +108,13 @@ func update(
 
 	if target != null:
 
-		var distance: float = (
-			boid.position.distance_to(
+		var distance_sq: float = (
+			boid.position.distance_squared_to(
 				target.position
 			)
 		)
 
-		if distance <= eating_distance:
+		if distance_sq <= eating_distance * eating_distance:
 
 			_eat(
 				boid,
@@ -143,18 +137,20 @@ func _find_food(
 
 
 	var closest_food: BoidBase = null
-	var closest_distance: float = detection_radius
+	var closest_distance_sq: float = (
+		detection_radius * detection_radius
+	)
 
+	# Was: loop every boid in BoidBase.all_boids. Now: only boids the
+	# spatial grid says are actually within detection_radius.
+	var nearby: Array[BoidBase] = BoidBase.query_radius(
+		boid.position,
+		detection_radius
+	)
 
-	for other in BoidBase.all_boids:
-
-		if not is_instance_valid(other):
-			continue
+	for other in nearby:
 
 		if other == boid:
-			continue
-
-		if other.is_queued_for_deletion():
 			continue
 
 
@@ -165,9 +161,6 @@ func _find_food(
 		var prey_size: float = _get_boid_size(other)
 
 		if prey_size <= 0.0:
-			continue
-
-		if prey_size < minimum_prey_size:
 			continue
 
 
@@ -184,17 +177,17 @@ func _find_food(
 		# DISTANCE
 		# --------------------------------------------------
 
-		var distance: float = (
-			boid.position.distance_to(
+		var distance_sq: float = (
+			boid.position.distance_squared_to(
 				other.position
 			)
 		)
 
-		if distance >= closest_distance:
+		if distance_sq >= closest_distance_sq:
 			continue
 
 
-		closest_distance = distance
+		closest_distance_sq = distance_sq
 		closest_food = other
 
 

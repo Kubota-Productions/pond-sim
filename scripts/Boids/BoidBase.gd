@@ -1,21 +1,11 @@
 extends Node2D
 class_name BoidBase
 
-static var boid_count: int:
-	get:
-		var count: int = 0
-
-		for boid in all_boids:
-
-			if not is_instance_valid(boid):
-				continue
-
-			if boid.is_queued_for_deletion():
-				continue
-
-			count += 1
-
-		return count
+## Maintained incrementally in _ready() / _exit_tree() instead of being
+## recomputed by scanning all_boids every time it's read. Counter.gd reads
+## this every frame, so the old computed-property version was an O(n) scan
+## just to display a number.
+static var boid_count: int = 0
 
 
 # MODULES
@@ -72,6 +62,14 @@ var acceleration: Vector2
 
 var break_origin: Vector2
 
+## script -> module instance. Built once in _ready() so get_module_by_type()
+## is a dictionary lookup instead of a linear scan + is_instance_of check.
+## This matters a lot because get_module_by_type() is called from inside the
+## per-neighbor loops below (flocking, breeding, consumption, intelligence),
+## so an O(module_count) scan there used to get multiplied by every single
+## boid-pair check in the simulation.
+var _module_cache: Dictionary = {}
+
 
 # GLOBAL FLOCK
 static var all_boids: Array[BoidBase] = []
@@ -79,14 +77,98 @@ static var all_boids: Array[BoidBase] = []
 static var bounds: Rect2 = Rect2()
 
 
-# SPEED
-# The base speed every module's modify_speed() chain starts from.
-# Exposed as a named constant (instead of a magic number buried in
-# _get_max_speed) so modules like BoidSpeedModule can normalize
-# against it and apply their own speed as a multiplier rather than an
-# outright overwrite — which keeps the speed chain's result
-# independent of module ordering in the `modules` array.
-const DEFAULT_BASE_SPEED: float = 100.0
+# =============================================================
+# SPATIAL GRID
+# =============================================================
+#
+# _flock(), breeding, consumption and the intelligence break-group check
+# all need to answer "which boids are near this position?". Looping over
+# ALL boids to answer that (as before) is O(n^2) per frame, across FOUR
+# separate systems, which is why things fell over well before 100 boids.
+#
+# This grid is rebuilt at most once per engine frame — whichever boid asks
+# for it first that frame triggers the rebuild, everyone else that same
+# frame reuses it — and turns "who's nearby" into checking a handful of
+# buckets instead of scanning the whole flock.
+
+## World units per grid cell. Keep this roughly in line with your largest
+## interaction radius (perception / detection / break-group radius). The
+## default spawn_area is 2000x2000 with radii around 60-100, so 100 is a
+## reasonable starting point; tune per-project.
+static var grid_cell_size: float = 100.0
+
+static var _grid: Dictionary = {}
+static var _grid_frame: int = -1
+
+
+static func _cell_coords(pos: Vector2) -> Vector2i:
+	return Vector2i(
+		int(floor(pos.x / grid_cell_size)),
+		int(floor(pos.y / grid_cell_size))
+	)
+
+
+static func _rebuild_grid_if_stale() -> void:
+
+	var current_frame: int = Engine.get_process_frames()
+
+	if current_frame == _grid_frame:
+		return
+
+	_grid_frame = current_frame
+	_grid.clear()
+
+	for boid in all_boids:
+
+		if not is_instance_valid(boid):
+			continue
+
+		if boid.is_queued_for_deletion():
+			continue
+
+		var cell: Vector2i = _cell_coords(boid.position)
+
+		if not _grid.has(cell):
+			_grid[cell] = []
+
+		_grid[cell].append(boid)
+
+
+## Returns every valid, non-freed boid within `radius` of `center`,
+## including the caller if it's in range (callers should skip `other == self`
+## the same way they already did when iterating all_boids directly).
+static func query_radius(
+	center: Vector2,
+	radius: float
+) -> Array[BoidBase]:
+
+	_rebuild_grid_if_stale()
+
+	var result: Array[BoidBase] = []
+
+	var cell_radius: int = int(ceil(radius / grid_cell_size))
+	var center_cell: Vector2i = _cell_coords(center)
+
+	for dx in range(-cell_radius, cell_radius + 1):
+
+		for dy in range(-cell_radius, cell_radius + 1):
+
+			var cell: Vector2i = center_cell + Vector2i(dx, dy)
+
+			if not _grid.has(cell):
+				continue
+
+			for boid in _grid[cell]:
+
+				if not is_instance_valid(boid):
+					continue
+
+				if boid.is_queued_for_deletion():
+					continue
+
+				result.append(boid)
+
+	return result
 
 
 # READY
@@ -94,6 +176,15 @@ func _ready() -> void:
 
 	# ENERGY
 	energy = starting_energy
+
+	# Build the module lookup cache before anything calls
+	# get_module_by_type() (including modules' own initialize()).
+	for module in modules:
+
+		if module == null:
+			continue
+
+		_module_cache[module.get_script()] = module
 
 	# Initialize every installed module.
 	for module in modules:
@@ -110,45 +201,9 @@ func _ready() -> void:
 	)
 
 	all_boids.append(self)
+	boid_count += 1
 
 	queue_redraw()
-
-func copy_base_configuration_from(
-	source: BoidBase
-) -> void:
-
-	if source == null:
-		return
-
-
-	# =========================================================
-	# FLOCKING
-	# =========================================================
-
-	max_force = source.max_force
-	perception_radius = source.perception_radius
-	separation_radius = source.separation_radius
-
-	separation_weight = source.separation_weight
-	alignment_weight = source.alignment_weight
-	cohesion_weight = source.cohesion_weight
-
-
-	# =========================================================
-	# EDGE AVOIDANCE
-	# =========================================================
-
-	edge_avoid_margin = source.edge_avoid_margin
-	edge_avoid_force = source.edge_avoid_force
-	edge_avoid_curve = source.edge_avoid_curve
-
-
-	# =========================================================
-	# BIOLOGY
-	# =========================================================
-
-	max_energy = source.max_energy
-	starting_energy = source.starting_energy
 
 
 # EXIT TREE
@@ -157,6 +212,7 @@ func _exit_tree() -> void:
 	# Remove this boid from the global flock immediately
 	# when it leaves the scene tree.
 	all_boids.erase(self)
+	boid_count -= 1
 
 
 # PROCESS
@@ -174,60 +230,18 @@ func _process(delta: float) -> void:
 		)
 
 		# A module may have called queue_free().
+		# Stop processing this boid immediately.
 		if is_queued_for_deletion():
 			return
 
-
-	# --------------------------------------------------
-	# DEAD BOID
-	# --------------------------------------------------
-
-	var age_module: BoidAgeModule = (
-		get_module_by_type(
-			BoidAgeModule
-		)
-	)
-
-	if age_module != null and age_module.is_dead:
-
-		# Make absolutely sure the corpse cannot move.
-		velocity = Vector2.ZERO
-		acceleration = Vector2.ZERO
-
-		# Keep the corpse at its current scale.
-		scale = _get_scale()
-
-		# Keep it black.
-		queue_redraw()
-
-		# IMPORTANT:
-		# Do NOT flock.
-		# Do NOT apply forces.
-		# Do NOT move.
-		# Do NOT wrap.
-		# Do NOT clamp.
-		return
-
-
-	# --------------------------------------------------
 	# FLOCK
-	# --------------------------------------------------
-
 	_flock()
 
-
-	# --------------------------------------------------
 	# EDGE AVOIDANCE
-	# --------------------------------------------------
-
 	if bounds.size != Vector2.ZERO:
 		_avoid_edges()
 
-
-	# --------------------------------------------------
 	# MODULE FORCES
-	# --------------------------------------------------
-
 	for module in modules:
 
 		if module == null:
@@ -237,14 +251,11 @@ func _process(delta: float) -> void:
 			self
 		)
 
+		# A future module could queue this boid for deletion.
 		if is_queued_for_deletion():
 			return
 
-
-	# --------------------------------------------------
 	# MOVEMENT
-	# --------------------------------------------------
-
 	velocity += acceleration * delta
 
 	velocity = velocity.limit_length(
@@ -253,60 +264,33 @@ func _process(delta: float) -> void:
 
 	position += velocity * delta
 
-
-	# --------------------------------------------------
 	# ROTATION
-	# --------------------------------------------------
-
 	if velocity.length_squared() > 0.01:
 
 		rotation = velocity.angle()
 
-
-	# --------------------------------------------------
 	# BOUNDS
-	# --------------------------------------------------
-
 	if bounds.size != Vector2.ZERO:
 
-		if position.x < bounds.position.x:
+		position.x = clamp(
+			position.x,
+			bounds.position.x,
+			bounds.end.x
+		)
 
-			position.x = bounds.position.x
-			velocity.x = max(velocity.x, 0.0)
-
-		elif position.x > bounds.end.x:
-
-			position.x = bounds.end.x
-			velocity.x = min(velocity.x, 0.0)
-
-
-		if position.y < bounds.position.y:
-
-			position.y = bounds.position.y
-			velocity.y = max(velocity.y, 0.0)
-
-		elif position.y > bounds.end.y:
-
-			position.y = bounds.end.y
-			velocity.y = min(velocity.y, 0.0)
+		position.y = clamp(
+			position.y,
+			bounds.position.y,
+			bounds.end.y
+		)
 
 	else:
 
 		_wrap_around()
 
-
-	# --------------------------------------------------
-	# VISUALS
-	# --------------------------------------------------
-
 	scale = _get_scale()
 
 	queue_redraw()
-
-
-	# --------------------------------------------------
-	# RESET ACCELERATION
-	# --------------------------------------------------
 
 	acceleration = Vector2.ZERO
 
@@ -321,34 +305,39 @@ func _flock() -> void:
 	var separation_count: int = 0
 	var flock_weight: float = 0.0
 
-	for other in all_boids:
+	var perception_radius_sq: float = perception_radius * perception_radius
+	var separation_radius_sq: float = separation_radius * separation_radius
+
+	# Was: loop every boid in the flock (O(n) per boid, O(n^2) total).
+	# Now: only boids the spatial grid says could plausibly be nearby.
+	var nearby: Array[BoidBase] = BoidBase.query_radius(
+		position,
+		perception_radius
+	)
+
+	for other in nearby:
 
 		if other == self:
 			continue
 
-		# IMPORTANT:
-		# queue_free() is deferred, so a freed boid can remain
-		# in all_boids briefly. Validate it before accessing it.
-		if not is_instance_valid(other):
-			continue
-
-		if other.is_queued_for_deletion():
-			continue
-
-		var distance: float = (
-			position.distance_to(
+		var distance_sq: float = (
+			position.distance_squared_to(
 				other.position
 			)
 		)
 
 		if (
-			distance <= 0.0
-			or distance >= perception_radius
+			distance_sq <= 0.0
+			or distance_sq >= perception_radius_sq
 		):
 			continue
 
+		# Only pay for the sqrt once we know this boid is an actual
+		# neighbor, instead of on every candidate like distance_to() did.
+		var distance: float = sqrt(distance_sq)
+
 		# SEPARATION
-		if distance < separation_radius:
+		if distance_sq < separation_radius_sq:
 
 			separation += (
 				position
@@ -464,7 +453,7 @@ func _flock() -> void:
 # GET MAX SPEED
 func _get_max_speed() -> float:
 
-	var speed: float = DEFAULT_BASE_SPEED
+	var speed: float = 100.0
 
 	for module in modules:
 
@@ -484,6 +473,9 @@ func get_module_by_type(
 	module_type: Variant
 ) -> BoidModifierModule:
 
+	if _module_cache.has(module_type):
+		return _module_cache[module_type]
+
 	for module in modules:
 
 		if module == null:
@@ -493,6 +485,8 @@ func get_module_by_type(
 			module,
 			module_type
 		):
+
+			_module_cache[module_type] = module
 
 			return module
 

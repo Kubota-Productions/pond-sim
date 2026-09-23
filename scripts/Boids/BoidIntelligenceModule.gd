@@ -48,13 +48,6 @@ var break_timer: float = 0.0
 
 var break_origin: Vector2
 
-# True when this module's genetic value was copied from a parent by
-# BoidBreedingModule via prepare_offspring(). Prevents initialize()
-# from re-rolling a random value over the inherited one. Runtime break
-# state (below) is intentionally NOT covered by this flag — every
-# boid, inherited or not, should start with a clean break cycle.
-var _inherited: bool = false
-
 
 # =============================================================
 # INITIALIZE
@@ -62,11 +55,10 @@ var _inherited: bool = false
 
 func initialize(boid: BoidBase) -> void:
 
-	if not _inherited:
-		stamina = randf_range(
-			min_stamina,
-			max_stamina
-		)
+	stamina = randf_range(
+		min_stamina,
+		max_stamina
+	)
 
 	time_since_break = 0.0
 	break_urge = 0.0
@@ -164,18 +156,21 @@ func _count_ready_boids(
 
 	var count: int = 1
 
-	for other in BoidBase.all_boids:
+	var break_group_radius_sq: float = (
+		break_group_radius * break_group_radius
+	)
 
-		# IMPORTANT:
-		# queue_free() is deferred, so a freed boid can remain
-		# in all_boids briefly.
-		if not is_instance_valid(other):
-			continue
+	# Was: loop every boid in BoidBase.all_boids (O(n) per call, and this
+	# is called from update() for potentially every boid). Now: only the
+	# boids the spatial grid says are actually within break_group_radius.
+	var nearby: Array[BoidBase] = BoidBase.query_radius(
+		boid.position,
+		break_group_radius
+	)
+
+	for other in nearby:
 
 		if other == boid:
-			continue
-
-		if other.is_queued_for_deletion():
 			continue
 
 
@@ -193,13 +188,13 @@ func _count_ready_boids(
 			continue
 
 
-		var distance: float = (
-			boid.position.distance_to(
+		var distance_sq: float = (
+			boid.position.distance_squared_to(
 				other.position
 			)
 		)
 
-		if distance > break_group_radius:
+		if distance_sq > break_group_radius_sq:
 			continue
 
 
@@ -316,40 +311,3 @@ func modify_color(
 		)
 
 	return current_color
-
-
-# =============================================================
-# OFFSPRING
-# =============================================================
-
-func prepare_offspring(
-	offspring: BoidBase,
-	parent_a: BoidBase,
-	parent_b: BoidBase
-) -> void:
-
-	# Marks this module so initialize() doesn't overwrite the value
-	# applied by apply_inherited_state() (below) with a fresh random roll.
-	# Runtime break state is reset unconditionally in initialize()
-	# regardless of this flag, which is correct — a newborn shouldn't
-	# start mid-break or with an inherited break_urge.
-	_inherited = true
-
-
-# =============================================================
-# INHERITED STATE
-# =============================================================
-# duplicate(true) does not copy non-@export vars, so `stamina`
-# would otherwise come back at its script default (1.0) instead of the
-# parent's actual rolled value. BoidBreedingModule captures this on
-# the live parent module and re-applies it here on the offspring's copy.
-
-func get_inherited_state() -> Dictionary:
-	return {
-		"stamina": stamina,
-	}
-
-
-func apply_inherited_state(state: Dictionary) -> void:
-	if state.has("stamina"):
-		stamina = state["stamina"]
