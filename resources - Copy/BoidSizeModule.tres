@@ -1,7 +1,0 @@
-[gd_resource type="Resource" script_class="BoidSizeModule" format=3 uid="uid://co51t4boq4mw4"]
-
-[ext_resource type="Script" uid="uid://cinyx0tfu7oll" path="res://scripts/Boids/BoidSizeModule.gd" id="1_63gqn"]
-
-[resource]
-resource_local_to_scene = true
-script = ExtResource("1_63gqn")
