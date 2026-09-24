@@ -309,11 +309,10 @@ func get_force(
 		return Vector2.ZERO
 
 
-	var desired_velocity: Vector2 = (
-		direction.normalized()
-		* boid._get_max_speed()
-	)
-
+	var desired_velocity: Vector2 
+	if direction.length_squared() > 0:
+			desired_velocity = direction.normalized() * boid._get_max_speed()
+			
 	var steering: Vector2 = (
 		desired_velocity
 		- boid.velocity

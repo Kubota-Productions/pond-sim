@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://c8fbmabmtj8q6"]
 
-[ext_resource type="Texture2D" uid="uid://v2fstt3kptb1" path="res://assets/sand2.png" id="1_8hwss"]
+[ext_resource type="Script" uid="uid://c1ynbyqkctsk3" path="res://BoidGPUFlock.gd" id="1_8hwss"]
 [ext_resource type="Script" uid="uid://byupr6dqng3kj" path="res://scripts/Boids/BoidSpawner.gd" id="1_bva37"]
 [ext_resource type="Texture2D" uid="uid://b0vraxa8l7gv0" path="res://assets/Fish.png" id="1_uil01"]
 [ext_resource type="PackedScene" uid="uid://c2a8h4i0hl08u" path="res://Boid.tscn" id="2_215fb"]
@@ -9,8 +9,6 @@
 [ext_resource type="Script" uid="uid://cnj81hb61xips" path="res://BoidRenderer.gd" id="5_uil01"]
 [ext_resource type="Script" uid="uid://db6wao6doi5bl" path="res://Waterzoom.gd" id="7_jaajy"]
 [ext_resource type="Shader" uid="uid://utfx85s7yuy8" path="res://scripts/water.gdshader" id="7_qf3r0"]
-[ext_resource type="Texture2D" uid="uid://yj1512vvo4ow" path="res://assets/rock.png" id="9_swhoa"]
-[ext_resource type="Texture2D" uid="uid://li2hpmfwparo" path="res://assets/rocktop.png" id="11_sr8fl"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_jaajy"]
 shader = ExtResource("7_qf3r0")
@@ -18,27 +16,42 @@ shader_parameter/land_pixel_size = Vector2(0.001, 0.001)
 shader_parameter/WATER_COL = Color(0.04, 0.38, 0.88, 1)
 shader_parameter/WATER2_COL = Color(0.04, 0.35, 0.78, 1)
 shader_parameter/FOAM_COL = Color(0.8125, 0.9609, 0.9648, 1)
-shader_parameter/opacity = 0.2150000102125
+shader_parameter/opacity = 0.234000011115
 shader_parameter/distortion_speed = 2.0
-shader_parameter/tile = 20.98
+shader_parameter/tile = 60.0
 shader_parameter/foam_distance = 0.025
 shader_parameter/foam_strength = 1.0
 shader_parameter/foam_speed = 1.5
 shader_parameter/foam_noise = 0.5
-shader_parameter/camera_zoom = 0.09
+shader_parameter/camera_zoom = 0.01
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_8hwss"]
+shader = ExtResource("7_qf3r0")
+shader_parameter/land_pixel_size = Vector2(0.001, 0.001)
+shader_parameter/WATER_COL = Color(0.0054232767, 0.15038592, 0.38599798, 1)
+shader_parameter/WATER2_COL = Color(0.0062108403, 0.14689869, 0.36384287, 1)
+shader_parameter/FOAM_COL = Color(0.1458748, 0.4105733, 0.49472612, 1)
+shader_parameter/opacity = 0.2150000102125
+shader_parameter/distortion_speed = 2.0
+shader_parameter/tile = 60.0
+shader_parameter/foam_distance = 0.025
+shader_parameter/foam_strength = 1.0
+shader_parameter/foam_speed = 1.5
+shader_parameter/foam_noise = 0.5
+shader_parameter/camera_zoom = 0.01
 
 [node name="Node2D" type="Node2D" unique_id=1045617605]
 
-[node name="TextureRect" type="TextureRect" parent="." unique_id=1374412892]
-texture_filter = 3
-texture_repeat = 1
-offset_left = -2867.0002
-offset_top = -1731.0
-offset_right = -1277.8004
-offset_bottom = -731.0
-scale = Vector2(5, 5)
-texture = ExtResource("1_8hwss")
-stretch_mode = 1
+[node name="Node2D2" type="Node2D" parent="." unique_id=272687809]
+position = Vector2(-3433, -2026)
+script = ExtResource("1_8hwss")
+
+[node name="ColorRect3" type="ColorRect" parent="." unique_id=690200214]
+offset_left = -3433.0
+offset_top = -2026.0
+offset_right = 6428.0
+offset_bottom = 3579.0
+mouse_filter = 2
 
 [node name="MultiMeshInstance2D" type="MultiMeshInstance2D" parent="." unique_id=583462039]
 script = ExtResource("5_uil01")
@@ -49,20 +62,6 @@ texture_size = Vector2(30, 30)
 script = ExtResource("1_bva37")
 boid_scene = ExtResource("2_215fb")
 spawn_area = Rect2(0, 0, 3840, 2100)
-
-[node name="Rock2" type="Sprite2D" parent="Node2D" unique_id=1386555765]
-texture_filter = 1
-texture_repeat = 1
-position = Vector2(1893.5, 681.5)
-scale = Vector2(1.96, 1.96)
-texture = ExtResource("9_swhoa")
-
-[node name="Rock" type="Sprite2D" parent="Node2D" unique_id=70534799]
-texture_filter = 1
-texture_repeat = 1
-position = Vector2(1153, 1523)
-scale = Vector2(2.04, 2.04)
-texture = ExtResource("9_swhoa")
 
 [node name="Camera2D" type="Camera2D" parent="Node2D" unique_id=2096432904]
 position = Vector2(960, 545)
@@ -90,36 +89,35 @@ grow_vertical = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="ColorRect" type="ColorRect" parent="Node2D/Camera2D/Control" unique_id=1857662364]
+[node name="ColorRect2" type="ColorRect" parent="Node2D/Camera2D/Control" unique_id=968295886]
 texture_filter = 3
 texture_repeat = 1
 material = SubResource("ShaderMaterial_jaajy")
 layout_mode = 0
-offset_left = -26.000061
-offset_top = -343.00006
-offset_right = 7974.0
-offset_bottom = 7657.0
-scale = Vector2(0.2, 0.2)
+offset_left = -1422.4
+offset_top = -857.6
+offset_right = 18132.598
+offset_bottom = 10477.399
+scale = Vector2(0.28, 0.28)
 mouse_filter = 2
 script = ExtResource("7_jaajy")
-land_sprite_path = NodePath("../../../Rock")
+camera_path = NodePath("..")
+
+[node name="ColorRect" type="ColorRect" parent="Node2D/Camera2D/Control" unique_id=1857662364]
+texture_filter = 3
+texture_repeat = 1
+material = SubResource("ShaderMaterial_8hwss")
+layout_mode = 0
+offset_left = -1651.0
+offset_top = -1040.0
+offset_right = 17903.998
+offset_bottom = 10294.999
+scale = Vector2(0.28, 0.28)
+mouse_filter = 2
+script = ExtResource("7_jaajy")
 camera_path = NodePath("../..")
 
 [node name="Label" type="Label" parent="." unique_id=557948533]
 offset_right = 40.0
 offset_bottom = 23.0
 script = ExtResource("5_s3l4w")
-
-[node name="Rock2" type="Sprite2D" parent="." unique_id=1297936099]
-texture_filter = 1
-texture_repeat = 1
-position = Vector2(1893.5, 681.5)
-scale = Vector2(1.96, 1.96)
-texture = ExtResource("11_sr8fl")
-
-[node name="Rock" type="Sprite2D" parent="." unique_id=1667262336]
-texture_filter = 1
-texture_repeat = 1
-position = Vector2(1153, 1523)
-scale = Vector2(2.04, 2.04)
-texture = ExtResource("11_sr8fl")

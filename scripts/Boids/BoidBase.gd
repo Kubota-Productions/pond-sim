@@ -7,6 +7,13 @@ class_name BoidBase
 ## just to display a number.
 static var boid_count: int = 0
 
+## Set to true by BoidGPUFlock when it's present in the scene. When true,
+## _process() skips its own _flock() / _avoid_edges() / movement integration
+## entirely — BoidGPUFlock computes new positions/velocities for every boid
+## in one compute shader dispatch instead, then calls apply_gpu_motion() on
+## each boid once results are back from the GPU.
+static var gpu_flocking_enabled: bool = false
+
 
 # MODULES
 @export_group("Modules")
@@ -59,6 +66,12 @@ func remove_energy(amount: float) -> void:
 # RUNTIME
 var velocity: Vector2
 var acceleration: Vector2
+
+## Sum of edge-avoidance + every module's get_force() for this boid this
+## frame. Computed every frame regardless of gpu_flocking_enabled, but only
+## consumed directly by BoidGPUFlock's shader dispatch in GPU mode — in CPU
+## mode the same forces are added straight into `acceleration` as before.
+var external_force: Vector2 = Vector2.ZERO
 
 var break_origin: Vector2
 
@@ -265,42 +278,120 @@ func _process(delta: float) -> void:
 		if is_queued_for_deletion():
 			return
 
-	# FLOCK
-	_flock()
+	if gpu_flocking_enabled:
 
-	# EDGE AVOIDANCE
+		# Movement itself happens on the GPU. All this boid does here is
+		# hand over the forces the CPU is still responsible for (edge
+		# avoidance, and every module's get_force() — break-wandering,
+		# eating-chase, anything else a module contributes) so the compute
+		# shader can fold them into its integration step. BoidGPUFlock
+		# runs its own _process() AFTER every boid's (see its
+		# process_priority), gathers this, dispatches the shader, and
+		# calls apply_gpu_motion() on every boid with the result.
+		external_force = _compute_external_force()
+
+	else:
+
+		# ORIGINAL CPU PATH.
+
+		# FLOCK
+		_flock()
+
+		# EDGE AVOIDANCE
+		if bounds.size != Vector2.ZERO:
+			_avoid_edges()
+
+		# MODULE FORCES
+		for module in modules:
+
+			if module == null:
+				continue
+
+			acceleration += module.get_force(
+				self
+			)
+
+			# A future module could queue this boid for deletion.
+			if is_queued_for_deletion():
+				return
+
+		# MOVEMENT
+		velocity += acceleration * delta
+
+		velocity = velocity.limit_length(
+			_get_max_speed()
+		)
+
+		position += velocity * delta
+
+		# ROTATION
+		if velocity.length_squared() > 0.01:
+
+			rotation = velocity.angle()
+
+		# BOUNDS
+		if bounds.size != Vector2.ZERO:
+
+			position.x = clamp(
+				position.x,
+				bounds.position.x,
+				bounds.end.x
+			)
+
+			position.y = clamp(
+				position.y,
+				bounds.position.y,
+				bounds.end.y
+			)
+
+		else:
+
+			_wrap_around()
+
+		acceleration = Vector2.ZERO
+
+	scale = _get_scale()
+
+	draw_color = _compute_draw_color()
+
+
+## Combines edge avoidance with every module's get_force() into a single
+## vector. In CPU mode these are added into `acceleration` individually
+## instead (see the else-branch above); this exists so GPU mode can hand
+## the shader one pre-summed force per boid without it needing to know
+## anything about edges or modules.
+func _compute_external_force() -> Vector2:
+
+	var force: Vector2 = Vector2.ZERO
+
 	if bounds.size != Vector2.ZERO:
-		_avoid_edges()
+		force += _compute_edge_avoidance_force()
 
-	# MODULE FORCES
 	for module in modules:
 
 		if module == null:
 			continue
 
-		acceleration += module.get_force(
-			self
-		)
+		force += module.get_force(self)
 
-		# A future module could queue this boid for deletion.
-		if is_queued_for_deletion():
-			return
+	return force
 
-	# MOVEMENT
-	velocity += acceleration * delta
 
-	velocity = velocity.limit_length(
-		_get_max_speed()
-	)
+## Called by BoidGPUFlock once the compute shader has produced this frame's
+## new position/velocity for this boid. Mirrors the ROTATION/BOUNDS steps
+## that used to live at the end of _process()'s CPU path.
+func apply_gpu_motion(
+	new_position: Vector2,
+	new_velocity: Vector2
+) -> void:
 
-	position += velocity * delta
+	velocity = new_velocity
 
-	# ROTATION
 	if velocity.length_squared() > 0.01:
-
 		rotation = velocity.angle()
 
-	# BOUNDS
+	position = new_position
+
 	if bounds.size != Vector2.ZERO:
 
 		position.x = clamp(
@@ -318,12 +409,6 @@ func _process(delta: float) -> void:
 	else:
 
 		_wrap_around()
-
-	scale = _get_scale()
-
-	draw_color = _compute_draw_color()
-
-	acceleration = Vector2.ZERO
 
 
 # FLOCK
@@ -529,6 +614,14 @@ func get_module_by_type(
 
 # EDGE AVOIDANCE
 func _avoid_edges() -> void:
+	acceleration += _compute_edge_avoidance_force()
+
+
+## Same math as the old _avoid_edges(), just returning the steering force
+## instead of adding it straight into `acceleration` — so both the CPU path
+## (_avoid_edges() above) and GPU mode's _compute_external_force() can use
+## it.
+func _compute_edge_avoidance_force() -> Vector2:
 
 	var steer: Vector2 = Vector2.ZERO
 
@@ -552,9 +645,9 @@ func _avoid_edges() -> void:
 		- position.y
 	)
 
-	var direction: Vector2 = (
-		velocity.normalized()
-	)
+	var direction: Vector2 = Vector2.ZERO
+	if velocity.length_squared() > 0:
+		direction = velocity.normalized()
 
 	# LEFT
 	if dist_left < edge_avoid_margin:
@@ -624,24 +717,23 @@ func _avoid_edges() -> void:
 			+ moving_toward * 2.0
 		)
 
-	if steer != Vector2.ZERO:
+	if steer == Vector2.ZERO:
+		return Vector2.ZERO
 
-		steer = steer.normalized()
+	steer = steer.normalized()
 
-		var desired_velocity: Vector2 = (
-			steer * _get_max_speed()
-		)
+	var desired_velocity: Vector2 = (
+		steer * _get_max_speed()
+	)
 
-		var steering: Vector2 = (
-			desired_velocity
-			- velocity
-		)
+	var steering: Vector2 = (
+		desired_velocity
+		- velocity
+	)
 
-		acceleration += (
-			steering.limit_length(
-				edge_avoid_force
-			)
-		)
+	return steering.limit_length(
+		edge_avoid_force
+	)
 
 
 # EDGE PUSH
