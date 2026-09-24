@@ -8,7 +8,7 @@ static var quadtree_split_count: int = 8
 static var quadtree_max_depth: int = 10
 static var _quadtree_root: QuadTreeNode = null
 static var _quadtree_frame: int = -1
-static var _quadtree_debug_boid: BoidBase = null
+
 
 @export_group("Modules")
 @export var modules: Array[BoidModifierModule] = []
@@ -29,10 +29,6 @@ static var _quadtree_debug_boid: BoidBase = null
 @export_group("Biology")
 @export var max_energy: float = 100.0
 @export var starting_energy: float = 75.0
-
-@export_group("Quadtree Debug")
-@export var debug_quadtree: bool = false
-@export var debug_quadtree_max_depth: int = -1
 
 var energy: float = 0.0
 var velocity: Vector2
@@ -247,13 +243,9 @@ static func query_radius(
 	query_radius_into(center, radius, result)
 	return result
 
-
 func _exit_tree() -> void:
 	all_boids.erase(self)
 	boid_count = max(boid_count - 1, 0)
-
-	if _quadtree_debug_boid == self:
-		_quadtree_debug_boid = null
 
 	_quadtree_frame = -1
 
@@ -280,9 +272,6 @@ func _ready() -> void:
 
 	all_boids.append(self)
 	boid_count += 1
-
-	if debug_quadtree and _quadtree_debug_boid == null:
-		_quadtree_debug_boid = self
 
 	draw_color = _compute_draw_color()
 
@@ -341,55 +330,6 @@ func _process(delta: float) -> void:
 	scale = _get_scale()
 	draw_color = _compute_draw_color()
 
-	if debug_quadtree and _quadtree_debug_boid == self:
-		queue_redraw()
-
-
-func _draw() -> void:
-	if not debug_quadtree:
-		return
-
-	if _quadtree_debug_boid != self:
-		return
-
-	_rebuild_quadtree_if_stale()
-
-	if _quadtree_root == null:
-		return
-
-	draw_set_transform(-position)
-
-	_draw_quadtree_node(_quadtree_root)
-
-
-func _draw_quadtree_node(node: QuadTreeNode) -> void:
-	if debug_quadtree_max_depth >= 0:
-		if node.depth > debug_quadtree_max_depth:
-			return
-
-	if node.is_leaf():
-		if node.boids.is_empty():
-			return
-
-		var alpha: float = 0.25 + (
-			float(node.boids.size())
-			/ float(quadtree_split_count)
-		) * 0.5
-
-		alpha = clamp(alpha, 0.2, 0.8)
-
-		draw_rect(
-			node.bounds,
-			Color(1.0, 0.0, 0.0, alpha),
-			false,
-			2.0
-		)
-
-		return
-
-	for child in node.children:
-		_draw_quadtree_node(child)
-
 func _compute_external_force() -> Vector2:
 	var force: Vector2 = Vector2.ZERO
 
@@ -431,7 +371,12 @@ func apply_gpu_motion(
 	else:
 		_wrap_around()
 
-
+## Lets external overlays (BoidQuadtreeDebugDraw) read the current
+## quadtree without duplicating the rebuild-if-stale logic.
+static func get_debug_quadtree_root() -> QuadTreeNode:
+	_rebuild_quadtree_if_stale()
+	return _quadtree_root
+	
 func _flock() -> void:
 	var separation: Vector2 = Vector2.ZERO
 	var alignment: Vector2 = Vector2.ZERO

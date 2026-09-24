@@ -58,25 +58,26 @@ script = ExtResource("5_uil01")
 boid_texture = ExtResource("1_uil01")
 texture_size = Vector2(30, 30)
 
-[node name="Node2D" type="Node2D" parent="." unique_id=1176570652]
+[node name="BoidSpawner" type="Node2D" parent="." unique_id=1176570652]
 script = ExtResource("1_bva37")
 boid_count = 500
 boid_scene = ExtResource("2_215fb")
-spawn_area = Rect2(0, 0, 3840, 2100)
+spawn_area = Rect2(0, 0, 7680, 4320)
+debug_quadtree = true
 
-[node name="Camera2D" type="Camera2D" parent="Node2D" unique_id=2096432904]
+[node name="Camera2D" type="Camera2D" parent="BoidSpawner" unique_id=2096432904]
 position = Vector2(960, 545)
 script = ExtResource("2_gqwpr")
 drag_button = 1
 drag_zoom_curve = 0.5
-bounds = Rect2(0, 0, 3840, 2160)
+bounds = Rect2(0, 0, 7680, 4320)
 bounds_overscroll = 500.0
 show_bounds_debug = true
 bounds_debug_color = Color(1, 0.6784314, 0.47843137, 0.8)
 overscroll_debug_color = Color(0.67276555, 0.0007854939, 0.7521569, 0.5019608)
 bounds_debug_line_width = 5.0
 
-[node name="Control" type="Control" parent="Node2D/Camera2D" unique_id=306186632]
+[node name="Control" type="Control" parent="BoidSpawner/Camera2D" unique_id=306186632]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -90,7 +91,7 @@ grow_vertical = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="ColorRect2" type="ColorRect" parent="Node2D/Camera2D/Control" unique_id=968295886]
+[node name="ColorRect2" type="ColorRect" parent="BoidSpawner/Camera2D/Control" unique_id=968295886]
 texture_filter = 3
 texture_repeat = 1
 material = SubResource("ShaderMaterial_jaajy")
@@ -104,7 +105,7 @@ mouse_filter = 2
 script = ExtResource("7_jaajy")
 camera_path = NodePath("..")
 
-[node name="ColorRect" type="ColorRect" parent="Node2D/Camera2D/Control" unique_id=1857662364]
+[node name="ColorRect" type="ColorRect" parent="BoidSpawner/Camera2D/Control" unique_id=1857662364]
 texture_filter = 3
 texture_repeat = 1
 material = SubResource("ShaderMaterial_8hwss")
@@ -121,4 +122,5 @@ camera_path = NodePath("../..")
 [node name="Label" type="Label" parent="." unique_id=557948533]
 offset_right = 40.0
 offset_bottom = 23.0
+text = "stat"
 script = ExtResource("5_s3l4w")

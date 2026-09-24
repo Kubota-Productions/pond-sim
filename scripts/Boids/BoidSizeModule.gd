@@ -20,7 +20,7 @@ class_name BoidSizeModule
 
 var size: float = 1.0
 var size_factor: float = 0.0
-
+var _nearby_scratch: Array[BoidBase] = []
 
 # True when this module's genetic value was copied from a parent by
 # BoidBreedingModule via prepare_offspring(). Prevents initialize()
@@ -68,7 +68,13 @@ func get_force(boid: BoidBase) -> Vector2:
 		)
 	)
 
-	for other in BoidBase.all_boids:
+	BoidBase.query_radius_into(
+		boid.position,
+		effective_radius,
+		_nearby_scratch
+	)
+
+	for other in _nearby_scratch:
 
 		if other == boid:
 			continue
@@ -79,47 +85,22 @@ func get_force(boid: BoidBase) -> Vector2:
 		if other.is_queued_for_deletion():
 			continue
 
-		var offset: Vector2 = (
-			boid.position - other.position
-		)
-
-		var distance_squared: float = (
-			offset.length_squared()
-		)
+		var offset: Vector2 = boid.position - other.position
+		var distance_squared: float = offset.length_squared()
 
 		if distance_squared <= 0.0001:
 			continue
 
-		var distance: float = sqrt(
-			distance_squared
-		)
+		var distance: float = sqrt(distance_squared)
 
 		if distance >= effective_radius:
 			continue
 
-		var direction: Vector2 = (
-			offset / distance
-		)
+		var direction: Vector2 = offset / distance
+		var proximity: float = 1.0 - distance / effective_radius
+		var size_strength: float = 1.0 + size_factor * size_space_multiplier
 
-		# 1.0 when touching, 0.0 at the edge
-		# of the personal-space radius.
-		var proximity: float = (
-			1.0
-			- distance / effective_radius
-		)
-
-		# Larger boids produce stronger separation.
-		var size_strength: float = (
-			1.0
-			+ size_factor * size_space_multiplier
-		)
-
-		separation += (
-			direction
-			* proximity
-			* personal_space_strength
-			* size_strength
-		)
+		separation += direction * proximity * personal_space_strength * size_strength
 
 	return separation
 

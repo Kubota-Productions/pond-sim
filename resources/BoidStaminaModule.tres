@@ -1,7 +1,10 @@
-[gd_resource type="Resource" script_class="BoidIntelligenceModule" format=3 uid="uid://cqp220iwhq62o"]
+[gd_resource type="Resource" script_class="BoidStaminaModule" format=3 uid="uid://cqp220iwhq62o"]
 
-[ext_resource type="Script" uid="uid://cjnhliqfbcxwb" path="res://scripts/Boids/BoidStaminaModule.gd" id="1_hagre"]
+[ext_resource type="Script" uid="uid://cjnhliqfbcxwb" path="res://scripts/Boids/BoidStaminaModule.gd" id="1_fwv2e"]
 
 [resource]
 resource_local_to_scene = true
-script = ExtResource("1_hagre")
+script = ExtResource("1_fwv2e")
+break_interval_min = 5.0
+break_speed_multiplier = 0.452
+break_group_size = 10
