@@ -60,6 +60,7 @@ texture_size = Vector2(30, 30)
 
 [node name="Node2D" type="Node2D" parent="." unique_id=1176570652]
 script = ExtResource("1_bva37")
+boid_count = 500
 boid_scene = ExtResource("2_215fb")
 spawn_area = Rect2(0, 0, 3840, 2100)
 

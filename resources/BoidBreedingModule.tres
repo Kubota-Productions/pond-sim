@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_kogul")
 breeding_cooldown = 5.0
-population_limit = 500
+population_limit = 1000
 minimum_energy = 5.0
 energy_cost = 2.0
 metadata/_custom_type_script = "uid://dop4kt85bqs1k"
