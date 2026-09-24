@@ -232,22 +232,14 @@ func _breed(
 	# CREATE OFFSPRING
 	# ---------------------------------------------------------
 
-	var offspring: BoidBase = BoidBase.new()
+	var offspring: BoidBase
 
-	# Create inherited modules before the offspring enters
-	# the scene tree.
-	offspring.modules = _inherit_modules(
-		offspring,
-		boid,
-		mate
-	)
-
-	# Inherit the base BoidBase configuration.
-	_inherit_base_stats(
-		offspring,
-		boid,
-		mate
-	)
+	if boid.scene_file_path.is_empty():
+		offspring = BoidBase.new()
+	else:
+		offspring = (
+			load(boid.scene_file_path) as PackedScene
+		).instantiate()
 
 	# Spawn halfway between the parents.
 	offspring.position = (
