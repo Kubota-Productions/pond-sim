@@ -1,13 +1,44 @@
 [gd_scene format=3 uid="uid://c8fbmabmtj8q6"]
 
+[ext_resource type="Texture2D" uid="uid://v2fstt3kptb1" path="res://assets/sand2.png" id="1_8hwss"]
 [ext_resource type="Script" uid="uid://byupr6dqng3kj" path="res://scripts/Boids/BoidSpawner.gd" id="1_bva37"]
 [ext_resource type="Texture2D" uid="uid://b0vraxa8l7gv0" path="res://assets/Fish.png" id="1_uil01"]
 [ext_resource type="PackedScene" uid="uid://c2a8h4i0hl08u" path="res://Boid.tscn" id="2_215fb"]
 [ext_resource type="Script" uid="uid://7t46wu03ejvu" path="res://scripts/Camera/CameraController.gd" id="2_gqwpr"]
 [ext_resource type="Script" uid="uid://b77kp2x8fyr0k" path="res://scripts/Counter.gd" id="5_s3l4w"]
 [ext_resource type="Script" uid="uid://cnj81hb61xips" path="res://BoidRenderer.gd" id="5_uil01"]
+[ext_resource type="Script" uid="uid://db6wao6doi5bl" path="res://Waterzoom.gd" id="7_jaajy"]
+[ext_resource type="Shader" uid="uid://utfx85s7yuy8" path="res://scripts/water.gdshader" id="7_qf3r0"]
+[ext_resource type="Texture2D" uid="uid://yj1512vvo4ow" path="res://assets/rock.png" id="9_swhoa"]
+[ext_resource type="Texture2D" uid="uid://li2hpmfwparo" path="res://assets/rocktop.png" id="11_sr8fl"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jaajy"]
+shader = ExtResource("7_qf3r0")
+shader_parameter/land_pixel_size = Vector2(0.001, 0.001)
+shader_parameter/WATER_COL = Color(0.04, 0.38, 0.88, 1)
+shader_parameter/WATER2_COL = Color(0.04, 0.35, 0.78, 1)
+shader_parameter/FOAM_COL = Color(0.8125, 0.9609, 0.9648, 1)
+shader_parameter/opacity = 0.2150000102125
+shader_parameter/distortion_speed = 2.0
+shader_parameter/tile = 20.98
+shader_parameter/foam_distance = 0.025
+shader_parameter/foam_strength = 1.0
+shader_parameter/foam_speed = 1.5
+shader_parameter/foam_noise = 0.5
+shader_parameter/camera_zoom = 0.09
 
 [node name="Node2D" type="Node2D" unique_id=1045617605]
+
+[node name="TextureRect" type="TextureRect" parent="." unique_id=1374412892]
+texture_filter = 3
+texture_repeat = 1
+offset_left = -2867.0002
+offset_top = -1731.0
+offset_right = -1277.8004
+offset_bottom = -731.0
+scale = Vector2(5, 5)
+texture = ExtResource("1_8hwss")
+stretch_mode = 1
 
 [node name="MultiMeshInstance2D" type="MultiMeshInstance2D" parent="." unique_id=583462039]
 script = ExtResource("5_uil01")
@@ -19,19 +50,76 @@ script = ExtResource("1_bva37")
 boid_scene = ExtResource("2_215fb")
 spawn_area = Rect2(0, 0, 3840, 2100)
 
+[node name="Rock2" type="Sprite2D" parent="Node2D" unique_id=1386555765]
+texture_filter = 1
+texture_repeat = 1
+position = Vector2(1893.5, 681.5)
+scale = Vector2(1.96, 1.96)
+texture = ExtResource("9_swhoa")
+
+[node name="Rock" type="Sprite2D" parent="Node2D" unique_id=70534799]
+texture_filter = 1
+texture_repeat = 1
+position = Vector2(1153, 1523)
+scale = Vector2(2.04, 2.04)
+texture = ExtResource("9_swhoa")
+
 [node name="Camera2D" type="Camera2D" parent="Node2D" unique_id=2096432904]
 position = Vector2(960, 545)
 script = ExtResource("2_gqwpr")
 drag_button = 1
 drag_zoom_curve = 0.5
 bounds = Rect2(0, 0, 3840, 2160)
-bounds_overscroll = 20.0
+bounds_overscroll = 500.0
 show_bounds_debug = true
 bounds_debug_color = Color(1, 0.6784314, 0.47843137, 0.8)
 overscroll_debug_color = Color(0.67276555, 0.0007854939, 0.7521569, 0.5019608)
 bounds_debug_line_width = 5.0
 
+[node name="Control" type="Control" parent="Node2D/Camera2D" unique_id=306186632]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -960.0
+offset_top = -545.0
+offset_right = -960.0
+offset_bottom = -545.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ColorRect" type="ColorRect" parent="Node2D/Camera2D/Control" unique_id=1857662364]
+texture_filter = 3
+texture_repeat = 1
+material = SubResource("ShaderMaterial_jaajy")
+layout_mode = 0
+offset_left = -26.000061
+offset_top = -343.00006
+offset_right = 7974.0
+offset_bottom = 7657.0
+scale = Vector2(0.2, 0.2)
+mouse_filter = 2
+script = ExtResource("7_jaajy")
+land_sprite_path = NodePath("../../../Rock")
+camera_path = NodePath("../..")
+
 [node name="Label" type="Label" parent="." unique_id=557948533]
 offset_right = 40.0
 offset_bottom = 23.0
 script = ExtResource("5_s3l4w")
+
+[node name="Rock2" type="Sprite2D" parent="." unique_id=1297936099]
+texture_filter = 1
+texture_repeat = 1
+position = Vector2(1893.5, 681.5)
+scale = Vector2(1.96, 1.96)
+texture = ExtResource("11_sr8fl")
+
+[node name="Rock" type="Sprite2D" parent="." unique_id=1667262336]
+texture_filter = 1
+texture_repeat = 1
+position = Vector2(1153, 1523)
+scale = Vector2(2.04, 2.04)
+texture = ExtResource("11_sr8fl")
